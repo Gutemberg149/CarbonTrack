@@ -92,7 +92,7 @@ export default function TelaHome({ navigation }) {
   }, [navigation]);
 
   const handleNavigateToNewProperty = useCallback(() => {
-    navigation.navigate("NovaPropriedade");
+    navigation.navigate("TelaNovaPropriedade");
   }, [navigation]);
 
   const handleActivityPress = useCallback(
@@ -108,7 +108,12 @@ export default function TelaHome({ navigation }) {
     <SafeAreaView style={[styles.container, themeStyles.container]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.conteudoScroll}>
         {/* Header */}
-        <LinearGradient colors={isDarkMode ? ["#1a472a", "#0d2818"] : ["#2D5A27", "#4CAF50"]} style={styles.cabecalho} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <LinearGradient
+          colors={isDarkMode ? ["#1a472a", "#0d2818"] : ["#2D5A27", "#4CAF50"]}
+          style={styles.cabecalho}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
           <View style={styles.topoCabecalho}>
             <View>
               <Text style={styles.textoBoasVindas}>Bem-vindo,</Text>
