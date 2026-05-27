@@ -1,156 +1,198 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from "react-native";
 import { AppContext } from "../../context/AppProvider";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
 
+const MetricCard = ({ icon, title, value, color, isDarkMode }) => (
+  <LinearGradient colors={isDarkMode ? ["#1E1E1E", "#2A2A2A"] : ["#FFFFFF", "#F8F9FA"]} style={styles.cardMetrica} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+    <View style={[styles.containerIcone, { backgroundColor: color + "20" }]}>
+      <Feather name={icon} size={24} color={color} />
+    </View>
+    <View style={styles.containerTextoMetrica}>
+      <Text style={[styles.tituloMetrica, isDarkMode && styles.textoEscuro]}>{title}</Text>
+      <Text style={[styles.valorMetrica, isDarkMode && styles.textoEscuro]}>{value}</Text>
+    </View>
+  </LinearGradient>
+);
+
+const ActivityItem = ({ activity, isDarkMode, onPress }) => (
+  <TouchableOpacity style={[styles.itemAtividade, isDarkMode && styles.itemAtividadeEscuro]} onPress={onPress} activeOpacity={0.7}>
+    <View style={styles.containerIconeAtividade}>
+      <MaterialCommunityIcons name={activity.icon} size={20} color="#4CAF50" style={styles.iconeAtividade} />
+    </View>
+    <View style={styles.conteudoAtividade}>
+      <Text style={[styles.tituloAtividade, isDarkMode && styles.textoEscuro]}>{activity.title}</Text>
+    </View>
+    <Text style={styles.valorAtividade}>{activity.amount}</Text>
+  </TouchableOpacity>
+);
+
+const Footer = ({ isDarkMode }) => (
+  <LinearGradient colors={isDarkMode ? ["#1E272E", "#0D1117"] : ["#2D5A27", "#1B3A1A"]} style={styles.rodape} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+    <View style={styles.conteudoRodape}>
+      <FontAwesome5 name="leaf" size={28} color="#4CAF50" />
+      <Text style={styles.tituloRodape}>CarbonTrack</Text>
+      <Text style={styles.subtituloRodape}>Monitoramento Inteligente de Carbono</Text>
+
+      <View style={styles.divisorRodape} />
+
+      <View style={styles.estatisticasRodape}>
+        <View style={styles.estatisticaRodape}>
+          <Text style={styles.valorEstatisticaRodape}>1.250+</Text>
+          <Text style={styles.rotuloEstatisticaRodape}>tCO2 sequestrados</Text>
+        </View>
+        <View style={styles.divisorEstatisticaRodape} />
+        <View style={styles.estatisticaRodape}>
+          <Text style={styles.valorEstatisticaRodape}>3</Text>
+          <Text style={styles.rotuloEstatisticaRodape}>propriedades ativas</Text>
+        </View>
+      </View>
+
+      <Text style={styles.versaoRodape}>Versão 1.0.0</Text>
+      <Text style={styles.copyrightRodape}>© 2024 CarbonTrack. Todos os direitos reservados.</Text>
+    </View>
+  </LinearGradient>
+);
+
+// Componente Principal
 export default function TelaHome({ navigation }) {
   const { user, isDarkMode, toggleTheme } = useContext(AppContext);
-  const [stats, setStats] = useState({
+  const themeStyles = isDarkMode ? styles.escuro : styles.claro;
+
+  // Estados
+  const [stats] = useState({
     totalSequestrado: 1250,
     propriedades: 3,
   });
 
-  const themeStyles = isDarkMode ? styles.escuro : styles.claro;
-
-  // Mock de atividades recentes
+  // Dados mockados
   const recentActivities = [
-    { id: 1, type: "property", title: "Fazenda Boa Vista", amount: "+150 tCO2", icon: "tree" },
-    { id: 4, type: "property", title: "Sítio São João", amount: "+75 tCO2", icon: "tree" },
+    {
+      id: 1,
+      type: "property",
+      title: "Fazenda Boa Vista",
+      amount: "+150 tCO2",
+      icon: "tree",
+      route: "Propriedades",
+    },
+    {
+      id: 2,
+      type: "property",
+      title: "Sítio São João",
+      amount: "+75 tCO2",
+      icon: "tree",
+      route: "Propriedades",
+    },
   ];
 
-  const MetricaCard = ({ icon, title, value, color, trend }) => (
-    <LinearGradient
-      colors={isDarkMode ? ["#1E1E1E", "#2A2A2A"] : ["#FFFFFF", "#F8F9FA"]}
-      style={styles.MetricaCard}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      <View style={[styles.iconeContainer, { backgroundColor: color + "20" }]}>
-        <Feather name={icon} size={24} color={color} />
-      </View>
-      <Text style={[styles.metricaTitulo, themeStyles.subTexto]}>{title}</Text>
-      <Text style={[styles.valorMetrica, themeStyles.texto]}>{value}</Text>
-    </LinearGradient>
-  );
+  // Handlers
+  const handleNavigateToProperties = useCallback(() => {
+    navigation.navigate("TelaListaPropriedades");
+  }, [navigation]);
 
-  const ItemAtividade = ({ activity }) => (
-    <View style={[styles.ItemAtividade, isDarkMode && styles.ItemAtividadeEscuro]}>
-      <View style={styles.iconeAtividade}>
-        <MaterialCommunityIcons style={styles.IconeAtividadeRecente} name={activity.icon} />
-      </View>
-      <View style={styles.conteudoAtividade}>
-        <Text style={[styles.tituloAtividade, themeStyles.texto]}>{activity.title}</Text>
-      </View>
-      <Text style={styles.valorAtividade}>{activity.amount}</Text>
-    </View>
-  );
+  const handleNavigateToNewProperty = useCallback(() => {
+    navigation.navigate("NovaPropriedade");
+  }, [navigation]);
 
-  const getIconColor = (type) => {
-    switch (type) {
-      case "property":
-        return "#4CAF50";
-    }
-  };
+  const handleActivityPress = useCallback(
+    (activity) => {
+      if (activity.route) {
+        navigation.navigate(activity.route);
+      }
+    },
+    [navigation]
+  );
 
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.conteudo}>
-        {/* Header Sofisticado */}
-        <LinearGradient
-          colors={isDarkMode ? ["#1a472a", "#0d2818"] : ["#2D5A27", "#4CAF50"]}
-          style={styles.cabecalho}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <View style={styles.cabecalhoTopo}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.conteudoScroll}>
+        {/* Header */}
+        <LinearGradient colors={isDarkMode ? ["#1a472a", "#0d2818"] : ["#2D5A27", "#4CAF50"]} style={styles.cabecalho} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <View style={styles.topoCabecalho}>
             <View>
-              <Text style={styles.boasvindas}>Bem-vindo,</Text>
+              <Text style={styles.textoBoasVindas}>Bem-vindo,</Text>
               <Text style={styles.nomeUsuario}>{user.name}</Text>
             </View>
-            <View style={styles.acoesCabecalho}>
-              <TouchableOpacity onPress={toggleTheme} style={styles.botaoIconeCabecalho}>
-                <Feather name={isDarkMode ? "sun" : "moon"} size={22} color="#FFF" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={toggleTheme} style={styles.botaoTema} activeOpacity={0.7}>
+              <Feather name={isDarkMode ? "sun" : "moon"} size={22} color="#FFF" />
+            </TouchableOpacity>
           </View>
         </LinearGradient>
 
-        {/* Métricas Grid */}
-        <View style={styles.gradesMetricas}>
-          <MetricaCard icon="droplet" title="CO2 Sequestrado" value={`${stats.totalSequestrado} t`} color="#4CAF50" trend="+12%" />
-          <MetricaCard icon="home" title="Propriedades" value={stats.propriedades} color="#2196F3" />
+        {/* Métricas */}
+        <View style={styles.containerMetricas}>
+          <TouchableOpacity onPress={handleNavigateToProperties} activeOpacity={0.7} style={styles.botaoMetrica}>
+            <MetricCard icon="droplet" title="CO2 Sequestrado" value={`${stats.totalSequestrado} t`} color="#4CAF50" isDarkMode={isDarkMode} />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleNavigateToProperties} activeOpacity={0.7} style={styles.botaoMetrica}>
+            <MetricCard icon="home" title="Propriedades" value={stats.propriedades} color="#2196F3" isDarkMode={isDarkMode} />
+          </TouchableOpacity>
         </View>
 
         {/* Atividades Recentes */}
-        <View style={styles.atividadesRecentes}>
+        <View style={styles.containerAtividades}>
           <View style={styles.cabecalhoSecao}>
             <Text style={[styles.tituloSecao, themeStyles.texto]}>Atividades Recentes</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleNavigateToProperties}>
               <Text style={styles.textoVerTodos}>Ver todos</Text>
             </TouchableOpacity>
           </View>
+
           {recentActivities.map((activity) => (
-            <ItemAtividade key={activity.id} activity={activity} />
+            <ActivityItem key={activity.id} activity={activity} isDarkMode={isDarkMode} onPress={() => handleActivityPress(activity)} />
           ))}
         </View>
 
-        {/* Botão Nova Propriedade Destacado */}
-        <View style={styles.containerAdicionarPropriedade}>
-          <TouchableOpacity style={styles.botaoAdicionarPropriedade} onPress={() => navigation.navigate("NovaPropriedade")}>
-            <LinearGradient colors={["#4CAF50", "#2D5A27"]} style={styles.gradienteAdicionarPropriedade} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-              <Feather name="plus" size={24} color="#FFF" />
-              <Text style={styles.textoAdicionarPropriedade}>Nova Propriedade</Text>
+        <View style={styles.containerBotaoAdicionar}>
+          <TouchableOpacity style={styles.botaoAdicionar} onPress={handleNavigateToProperties} activeOpacity={0.8}>
+            <LinearGradient colors={["#4CAF50", "#2D5A27"]} style={styles.gradienteBotaoAdicionar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Feather name="folder" size={24} color="#FFF" />
+              <Text style={styles.textoBotaoAdicionar}>Todas as Propriedades</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
 
-        {/* Rodapé */}
-        <LinearGradient colors={isDarkMode ? ["#1E272E", "#0D1117"] : ["#2D5A27", "#1B3A1A"]} style={styles.rodape} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <View style={styles.conteudoRodape}>
-            <FontAwesome5 name="leaf" size={24} color="#4CAF50" />
-            <Text style={styles.tituloRodape}>CarbonTrack</Text>
-            <Text style={styles.textoRodape}>Monitoramento Inteligente de Carbono</Text>
-            <View style={styles.divisorRodape} />
-            <View style={styles.estatisticasRodape}>
-              <View style={styles.estatisticaRodape}>
-                <Text style={styles.valorEstatisticaRodape}>1.250+</Text>
-                <Text style={styles.rotuloEstatisticaRodape}>tCO2 sequestrados</Text>
-              </View>
-              <View style={styles.divisorEstatisticaRodape} />
-              <View style={styles.estatisticaRodape}>
-                <Text style={styles.valorEstatisticaRodape}>2</Text>
-                <Text style={styles.rotuloEstatisticaRodape}>propriedades ativas</Text>
-              </View>
-            </View>
-            <Text style={styles.versaoRodape}>Versão 1.0.0</Text>
-            <Text style={styles.copyrightRodape}>© 2024 CarbonTrack. Todos os direitos reservados.</Text>
-          </View>
-        </LinearGradient>
+        <View style={styles.containerBotaoAdicionar}>
+          <TouchableOpacity style={styles.botaoAdicionar} onPress={handleNavigateToNewProperty} activeOpacity={0.8}>
+            <LinearGradient colors={["#4CAF50", "#2D5A27"]} style={styles.gradienteBotaoAdicionar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Feather name="plus" size={24} color="#FFF" />
+              <Text style={styles.textoBotaoAdicionar}>Nova Propriedade</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* Footer */}
+        <Footer isDarkMode={isDarkMode} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  conteudo: { paddingBottom: 0 },
+  // Container
+  container: {
+    flex: 1,
+  },
+  conteudoScroll: {
+    paddingBottom: 0,
+  },
 
-  // Header
+  // Cabeçalho
   cabecalho: {
     paddingHorizontal: 20,
-    paddingTop: 35,
+    paddingTop: 20,
     paddingBottom: 30,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
-  cabecalhoTopo: {
+  topoCabecalho: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 0,
   },
-  boasvindas: {
+  textoBoasVindas: {
     fontSize: 14,
     color: "rgba(255,255,255,0.8)",
     marginBottom: 4,
@@ -160,107 +202,61 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#FFF",
   },
-  acoesCabecalho: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  botaoIconeCabecalho: {
+  botaoTema: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
-    position: "relative",
   },
 
   // Métricas
-  gradesMetricas: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginTop: 40,
-    marginBottom: 20,
+  containerMetricas: {
+    paddingHorizontal: 20,
+    marginTop: 20,
     gap: 15,
-    justifyContent: "center",
   },
-  MetricaCard: {
-    width: "80%",
-    padding: 12,
+  botaoMetrica: {
+    width: "100%",
+  },
+  cardMetrica: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
     borderRadius: 15,
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    flexDirection: "row",
-    alignContent: "center",
-    alignItems: "center",
-    alignSelf: "center",
-    justifyContent: "space-between",
   },
-  iconeContainer: {
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
+  containerIcone: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    marginRight: 15,
   },
-  valorMetrica: {
-    fontSize: 18,
-    fontWeight: "bold",
+  containerTextoMetrica: {
+    flex: 1,
+  },
+  tituloMetrica: {
+    fontSize: 14,
+    color: "#666",
     marginBottom: 4,
   },
-  metricaTitulo: {
-    fontSize: 16,
-    color: "red",
+  valorMetrica: {
+    fontSize: 20,
     fontWeight: "bold",
-  },
-  trendContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  trendText: {
-    fontSize: 9,
-    color: "#4CAF50",
-    marginLeft: 2,
-  },
-
-  // Botão Nova Propriedade
-  containerAdicionarPropriedade: {
-    paddingHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  botaoAdicionarPropriedade: {
-    borderRadius: 12,
-    overflow: "hidden",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  gradienteAdicionarPropriedade: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    gap: 12,
-  },
-  textoAdicionarPropriedade: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "600",
+    color: "#333",
   },
 
   // Atividades
-  atividadesRecentes: {
-    marginTop: 0,
+  containerAtividades: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginTop: 20,
   },
   cabecalhoSecao: {
     flexDirection: "row",
@@ -271,54 +267,80 @@ const styles = StyleSheet.create({
   tituloSecao: {
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 0,
   },
   textoVerTodos: {
     color: "#4CAF50",
     fontSize: 14,
     fontWeight: "600",
   },
-  ItemAtividade: {
+  itemAtividade: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
     backgroundColor: "#FFF",
     borderRadius: 12,
     marginBottom: 10,
-    elevation: 1,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
-  ItemAtividadeEscuro: {
+  itemAtividadeEscuro: {
     backgroundColor: "#1E1E1E",
   },
-  iconeAtividade: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  containerIconeAtividade: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: "#E8F5E9",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
-    backgroundColor: "#d0f0d1",
   },
-  IconeAtividadeRecente: {
-    fontSize: 20,
-    color: "#4CAF50",
+  iconeAtividade: {
+    fontSize: 22,
   },
   conteudoAtividade: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
-
   tituloAtividade: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 2,
   },
-
   valorAtividade: {
     fontSize: 14,
     fontWeight: "bold",
     color: "#4CAF50",
+  },
+
+  // Botão Adicionar
+  containerBotaoAdicionar: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  botaoAdicionar: {
+    borderRadius: 12,
+    overflow: "hidden",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  gradienteBotaoAdicionar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    gap: 12,
+  },
+  textoBotaoAdicionar: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 
   // Rodapé
@@ -333,20 +355,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   tituloRodape: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#FFF",
     marginTop: 12,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  textoRodape: {
+  subtituloRodape: {
     fontSize: 13,
     color: "rgba(255,255,255,0.8)",
     textAlign: "center",
     marginBottom: 20,
   },
   divisorRodape: {
-    width: 50,
+    width: 60,
     height: 2,
     backgroundColor: "rgba(255,255,255,0.2)",
     marginVertical: 15,
@@ -392,12 +414,13 @@ const styles = StyleSheet.create({
     container: { backgroundColor: "#F5F5F5" },
     texto: { color: "#333" },
     subTexto: { color: "#666" },
-    card: { backgroundColor: "#FFF" },
   },
   escuro: {
     container: { backgroundColor: "#121212" },
     texto: { color: "#FFF" },
     subTexto: { color: "#CCC" },
-    card: { backgroundColor: "#1E1E1E" },
+  },
+  textoEscuro: {
+    color: "#FFF",
   },
 });
