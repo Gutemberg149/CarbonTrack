@@ -172,8 +172,8 @@ const styles = StyleSheet.create({
 
   // Cabeçalho
   cabecalho: {
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingTop: 35,
+    paddingBottom: 15,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },

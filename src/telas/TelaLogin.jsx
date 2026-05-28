@@ -1,36 +1,33 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, Alert } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Feather } from "@expo/vector-icons";
+import { useAuth } from "../../context/AuthContext.js";
 
 export default function Login({ navigation }) {
   const [nome, setNome] = useState("");
   const [senha, setSenha] = useState("");
+  const { login } = useAuth(); // Use o contexto
 
   const isButtonDisabled = nome.trim() === "" || senha.trim() === "";
 
   const handleLogin = async () => {
-    try {
-      await AsyncStorage.setItem("@usuario_nome", nome.trim());
+    const success = await login(nome.trim()); // Salva via contexto
 
+    if (success) {
       navigation.reset({
         index: 0,
         routes: [{ name: "TelaHome" }],
       });
-    } catch (e) {
-      console.error(e);
-      Alert.alert("Erro", "Não foi possível realizar o acesso.");
+    } else {
+      Alert.alert("Erro", "Não foi possível realizar o acesso");
     }
   };
 
   return (
     <LinearGradient colors={["#1a472a", "#2D5A27", "#4CAF50"]} style={styles.container} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <View style={styles.card}>
-        {/* Logo CarbonTrack */}
         <View style={styles.logoContainer}>
-          {/* <View style={styles.logoCircle}>
-            <Image source={require("../../assets/logo/logo2.png")} style={styles.logo} />
-          </View> */}
           <Text style={styles.appName}>CarbonTrack</Text>
           <Text style={styles.appSubtitle}>Monitoramento de Carbono</Text>
         </View>
@@ -49,6 +46,7 @@ export default function Login({ navigation }) {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
+            <Feather name="log-in" size={20} color="#FFF" />
             <Text style={styles.buttonText}>ENTRAR</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -56,7 +54,6 @@ export default function Login({ navigation }) {
         <TouchableOpacity onPress={() => navigation.navigate("TelaSignup")} style={styles.link}>
           <Text style={styles.linkText}>Não tem conta? Cadastre-se</Text>
         </TouchableOpacity>
-
         <Text style={styles.version}>Versão 1.0.0</Text>
       </View>
     </LinearGradient>
@@ -85,21 +82,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#E8F5E9",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  logo: {
-    width: 50,
-    height: 50,
-  },
   appName: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#2D5A27",
     marginBottom: 4,
@@ -137,6 +121,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     marginTop: 10,
+    flexDirection: "row",
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -145,6 +130,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    flexDirection: "row",
+    gap: 15,
   },
   buttonText: {
     color: "#FFF",

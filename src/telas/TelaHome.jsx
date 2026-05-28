@@ -1,5 +1,5 @@
 import React, { useContext, useState, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Alert } from "react-native";
 import { AppContext } from "../../context/AppProvider";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
@@ -58,7 +58,7 @@ const Footer = ({ isDarkMode }) => (
 
 // Componente Principal
 export default function TelaHome({ navigation }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { isDarkMode, toggleTheme } = useContext(AppContext);
   const themeStyles = isDarkMode ? styles.escuro : styles.claro;
 
@@ -76,7 +76,7 @@ export default function TelaHome({ navigation }) {
       title: "Fazenda Boa Vista",
       amount: "+150 tCO2",
       icon: "tree",
-      route: "Propriedades",
+      route: "TelaListaPropriedades",
     },
     {
       id: 2,
@@ -84,7 +84,7 @@ export default function TelaHome({ navigation }) {
       title: "Sítio São João",
       amount: "+75 tCO2",
       icon: "tree",
-      route: "Propriedades",
+      route: "TelaListaPropriedades",
     },
   ];
 
@@ -106,6 +106,23 @@ export default function TelaHome({ navigation }) {
     [navigation]
   );
 
+  const handleLogout = useCallback(() => {
+    Alert.alert("Sair", "Tem certeza que deseja sair?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Sair",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "TelaLogin" }],
+          });
+        },
+      },
+    ]);
+  }, [logout, navigation]);
+
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.conteudoScroll}>
@@ -116,15 +133,26 @@ export default function TelaHome({ navigation }) {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          <View style={styles.topoCabecalho}>
+          {/* <View style={styles.topoCabecalho}> */}
             <View>
               <Text style={styles.boasvindas}>Bem-vindo,</Text>
               <Text style={styles.nomeUsuario}>{user?.name || "Usuário"}</Text>
             </View>
-            <TouchableOpacity onPress={toggleTheme} style={styles.botaoTema}>
-              <Feather name={isDarkMode ? "sun" : "moon"} size={22} color="#FFF" />
-            </TouchableOpacity>
-          </View>
+            <View style={styles.appNameContainer}>
+              <FontAwesome5 name="leaf" size={20} color="#FFF" />
+              <Text style={styles.appNameHeader}>CarbonTrack</Text>
+            </View>
+            <View style={styles.acoesCabecalho}>
+              <TouchableOpacity onPress={handleLogout} style={styles.botaoLogout}>
+                <Feather name="log-out" size={20} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={toggleTheme} style={styles.botaoTema}>
+                <Feather name={isDarkMode ? "sun" : "moon"} size={20} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          {/* </View> */}
+
+          {/* Nome do App no Header */}
         </LinearGradient>
 
         {/* Métricas */}
@@ -189,33 +217,60 @@ const styles = StyleSheet.create({
   // Cabeçalho
   cabecalho: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 30,
+    paddingTop: 30,
+    paddingBottom: 15,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-  },
-  topoCabecalho: {
     flexDirection: "row",
+    justifyContent: "space-between",
+    alignContent: "center",
+  },
+
+  acoesCabecalho: {
+    flexDirection: "row",
+    gap: 12,
     justifyContent: "space-between",
     alignItems: "center",
   },
-  textoBoasVindas: {
-    fontSize: 14,
+  boasvindas: {
+    fontSize: 12,
     color: "rgba(255,255,255,0.8)",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   nomeUsuario: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#FFF",
   },
   botaoTema: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  botaoLogout: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  appNameContainer: {
+    flexDirection: "row",
+    alignItems: "top",
+    justifyContent: "center",
+    marginTop: 15,
+    gap: 8,
+    height: 40,
+  },
+  appNameHeader: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFF",
+    letterSpacing: 1,
   },
 
   // Métricas
