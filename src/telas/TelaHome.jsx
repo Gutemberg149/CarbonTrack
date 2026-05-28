@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } fr
 import { AppContext } from "../../context/AppProvider";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
+import { useAuth } from "../../context/AuthContext.js";
 
 const MetricCard = ({ icon, title, value, color, isDarkMode }) => (
   <LinearGradient colors={isDarkMode ? ["#1E1E1E", "#2A2A2A"] : ["#FFFFFF", "#F8F9FA"]} style={styles.cardMetrica} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
@@ -57,7 +58,8 @@ const Footer = ({ isDarkMode }) => (
 
 // Componente Principal
 export default function TelaHome({ navigation }) {
-  const { user, isDarkMode, toggleTheme } = useContext(AppContext);
+  const { user } = useAuth();
+  const { isDarkMode, toggleTheme } = useContext(AppContext);
   const themeStyles = isDarkMode ? styles.escuro : styles.claro;
 
   // Estados
@@ -116,10 +118,10 @@ export default function TelaHome({ navigation }) {
         >
           <View style={styles.topoCabecalho}>
             <View>
-              <Text style={styles.textoBoasVindas}>Bem-vindo,</Text>
-              <Text style={styles.nomeUsuario}>{user.name}</Text>
+              <Text style={styles.boasvindas}>Bem-vindo,</Text>
+              <Text style={styles.nomeUsuario}>{user?.name || "Usuário"}</Text>
             </View>
-            <TouchableOpacity onPress={toggleTheme} style={styles.botaoTema} activeOpacity={0.7}>
+            <TouchableOpacity onPress={toggleTheme} style={styles.botaoTema}>
               <Feather name={isDarkMode ? "sun" : "moon"} size={22} color="#FFF" />
             </TouchableOpacity>
           </View>
