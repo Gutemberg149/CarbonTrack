@@ -1,18 +1,22 @@
-import React, { useContext, useState, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Alert } from "react-native";
+import React, { useContext, useState, useCallback, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Alert, ActivityIndicator } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { AppContext } from "../../context/AppProvider";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext.js";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { API_BASE_URL } from "../config.js";
 
-const MetricCard = ({ icon, title, value, color, isDarkMode }) => (
+const MetricCard = ({ icon, title, value, color, isDarkMode, loading }) => (
   <LinearGradient colors={isDarkMode ? ["#1E1E1E", "#2A2A2A"] : ["#FFFFFF", "#F8F9FA"]} style={styles.cardMetrica} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
     <View style={[styles.containerIcone, { backgroundColor: color + "20" }]}>
       <Feather name={icon} size={24} color={color} />
     </View>
     <View style={styles.containerTextoMetrica}>
       <Text style={[styles.tituloMetrica, isDarkMode && styles.textoEscuro]}>{title}</Text>
-      <Text style={[styles.valorMetrica, isDarkMode && styles.textoEscuro]}>{value}</Text>
+      {loading ? <ActivityIndicator size="small" color={color} /> : <Text style={[styles.valorMetrica, isDarkMode && styles.textoEscuro]}>{value}</Text>}
     </View>
   </LinearGradient>
 );
@@ -20,7 +24,7 @@ const MetricCard = ({ icon, title, value, color, isDarkMode }) => (
 const ActivityItem = ({ activity, isDarkMode, onPress }) => (
   <TouchableOpacity style={[styles.itemAtividade, isDarkMode && styles.itemAtividadeEscuro]} onPress={onPress} activeOpacity={0.7}>
     <View style={styles.containerIconeAtividade}>
-      <MaterialCommunityIcons name={activity.icon} size={20} color="#4CAF50" style={styles.iconeAtividade} />
+      <MaterialCommunityIcons name={activity.icon} size={20} color="#4CAF50" />
     </View>
     <View style={styles.conteudoAtividade}>
       <Text style={[styles.tituloAtividade, isDarkMode && styles.textoEscuro]}>{activity.title}</Text>
@@ -38,57 +42,137 @@ const Footer = ({ isDarkMode }) => (
 
       <View style={styles.divisorRodape} />
 
-      <View style={styles.estatisticasRodape}>
-        <View style={styles.estatisticaRodape}>
-          <Text style={styles.valorEstatisticaRodape}>1.250+</Text>
-          <Text style={styles.rotuloEstatisticaRodape}>tCO2 sequestrados</Text>
-        </View>
-        <View style={styles.divisorEstatisticaRodape} />
-        <View style={styles.estatisticaRodape}>
-          <Text style={styles.valorEstatisticaRodape}>3</Text>
-          <Text style={styles.rotuloEstatisticaRodape}>propriedades ativas</Text>
-        </View>
-      </View>
-
       <Text style={styles.versaoRodape}>Versão 1.0.0</Text>
       <Text style={styles.copyrightRodape}>© 2024 CarbonTrack. Todos os direitos reservados.</Text>
     </View>
   </LinearGradient>
 );
 
-// Componente Principal
 export default function TelaHome({ navigation }) {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const { isDarkMode, toggleTheme } = useContext(AppContext);
   const themeStyles = isDarkMode ? styles.escuro : styles.claro;
+  const [userName, setUserName] = useState("");
+  const [token, setToken] = useState(null);
+  const [userId, setUserId] = useState(null);
 
-  // Estados
-  const [stats] = useState({
-    totalSequestrado: 1250,
-    propriedades: 3,
-  });
+  const [carregando, setCarregando] = useState(true);
+  const [propriedades, setPropriedades] = useState([]);
+  const [totalCO2, setTotalCO2] = useState(0);
+  const [totalPropriedades, setTotalPropriedades] = useState(0);
+  const [atividadesRecentes, setAtividadesRecentes] = useState([]);
 
-  // Dados mockados
-  const recentActivities = [
-    {
-      id: 1,
-      type: "property",
-      title: "Fazenda Boa Vista",
-      amount: "+150 tCO2",
-      icon: "tree",
-      route: "TelaListaPropriedades",
-    },
-    {
-      id: 2,
-      type: "property",
-      title: "Sítio São João",
-      amount: "+75 tCO2",
-      icon: "tree",
-      route: "TelaListaPropriedades",
-    },
-  ];
+  // Carregar dados do usuário do AsyncStorage
+  useEffect(() => {
+    const carregarDadosUsuario = async () => {
+      try {
+        let storedToken = await AsyncStorage.getItem("auth_token");
+        let storedUserId = await AsyncStorage.getItem("usuario_id");
+        let storedNome = await AsyncStorage.getItem("usuario_nome");
 
-  // Handlers
+        if (!storedToken) {
+          storedToken = await AsyncStorage.getItem("@auth_token");
+          storedUserId = await AsyncStorage.getItem("@usuario_id");
+          storedNome = await AsyncStorage.getItem("@usuario_nome");
+        }
+
+        if (storedToken && storedUserId) {
+          setToken(storedToken);
+          setUserId(storedUserId);
+          setUserName(storedNome || "Usuário");
+          console.log("✅ Dados carregados:", { userId: storedUserId, nome: storedNome });
+        } else {
+          console.log("⚠️ Nenhum token encontrado");
+          navigation.reset({ index: 0, routes: [{ name: "TelaLogin" }] });
+        }
+      } catch (error) {
+        console.error("Erro ao carregar dados:", error);
+      }
+    };
+    carregarDadosUsuario();
+  }, [navigation]);
+
+  // Função para buscar propriedades
+  const carregarPropriedades = useCallback(async () => {
+    if (!token || !userId) return;
+
+    setCarregando(true);
+    try {
+      console.log("📤 Buscando propriedades do usuário:", userId);
+
+      const response = await axios.get(`${API_BASE_URL}/propriedades`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      let todasPropriedades = [];
+      if (response.data && response.data._embedded) {
+        todasPropriedades = response.data._embedded.propriedadeResponseDTOList || [];
+      } else if (Array.isArray(response.data)) {
+        todasPropriedades = response.data;
+      }
+
+      const propriedadesDoUsuario = todasPropriedades.filter((prop) => prop.donoId === userId || prop.usuarioId === userId);
+
+      console.log("✅ Propriedades encontradas:", propriedadesDoUsuario.length);
+      setPropriedades(propriedadesDoUsuario);
+      setTotalPropriedades(propriedadesDoUsuario.length);
+
+      const somaCO2 = propriedadesDoUsuario.reduce((total, prop) => {
+        return total + (prop.carbonoEstimado || 0);
+      }, 0);
+
+      setTotalCO2(somaCO2);
+      console.log("📊 Total CO2:", somaCO2.toFixed(2), "t");
+
+      // Gerar atividades recentes (últimas 3 propriedades) - ALTERADO PARA 3
+      const ultimasPropriedades = [...propriedadesDoUsuario]
+        .sort((a, b) => {
+          return (b.anoAquisicao || 0) - (a.anoAquisicao || 0);
+        })
+        .slice(0, 3); 
+
+      const atividades = ultimasPropriedades.map((prop) => ({
+        id: prop.id,
+        title: prop.nome,
+        amount: `+${(prop.carbonoEstimado || 0).toFixed(2)} tCO2`,
+        icon: "tree",
+        route: "TelaListaPropriedades",
+      }));
+
+      setAtividadesRecentes(atividades);
+      console.log("📋 Atividades recentes geradas:", atividades.length);
+    } catch (error) {
+      console.error("❌ Erro ao buscar propriedades:", error.response?.status);
+
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        Alert.alert("Erro de Autenticação", "Sua sessão expirou. Faça login novamente.");
+        navigation.reset({ index: 0, routes: [{ name: "TelaLogin" }] });
+      }
+    } finally {
+      setCarregando(false);
+    }
+  }, [token, userId, navigation]);
+
+  // Recarregar dados quando a tela receber foco
+  useFocusEffect(
+    useCallback(() => {
+      console.log("🔄 TelaHome recebeu foco - recarregando dados...");
+      if (token && userId) {
+        carregarPropriedades();
+      }
+    }, [token, userId, carregarPropriedades])
+  );
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    if (token && userId) {
+      carregarPropriedades();
+    }
+  }, [token, userId]);
+
   const handleNavigateToProperties = useCallback(() => {
     navigation.navigate("TelaListaPropriedades");
   }, [navigation]);
@@ -113,11 +197,16 @@ export default function TelaHome({ navigation }) {
         text: "Sair",
         style: "destructive",
         onPress: async () => {
-          await logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "TelaLogin" }],
-          });
+          try {
+            await logout();
+            console.log("🔓 Logout realizado, dados mantidos no storage");
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "TelaLogin" }],
+            });
+          } catch (error) {
+            console.error("Erro no logout:", error);
+          }
         },
       },
     ]);
@@ -126,58 +215,69 @@ export default function TelaHome({ navigation }) {
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.conteudoScroll}>
-        {/* Header */}
         <LinearGradient
           colors={isDarkMode ? ["#1a472a", "#0d2818"] : ["#2D5A27", "#4CAF50"]}
           style={styles.cabecalho}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          {/* <View style={styles.topoCabecalho}> */}
-            <View>
-              <Text style={styles.boasvindas}>Bem-vindo,</Text>
-              <Text style={styles.nomeUsuario}>{user?.name || "Usuário"}</Text>
-            </View>
-            <View style={styles.appNameContainer}>
-              <FontAwesome5 name="leaf" size={20} color="#FFF" />
-              <Text style={styles.appNameHeader}>CarbonTrack</Text>
-            </View>
-            <View style={styles.acoesCabecalho}>
-              <TouchableOpacity onPress={handleLogout} style={styles.botaoLogout}>
-                <Feather name="log-out" size={20} color="#FFF" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={toggleTheme} style={styles.botaoTema}>
-                <Feather name={isDarkMode ? "sun" : "moon"} size={20} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          {/* </View> */}
-
-          {/* Nome do App no Header */}
+          <View>
+            <Text style={styles.boasvindas}>Bem-vindo,</Text>
+            <Text style={styles.nomeUsuario}>{userName || "Usuário"}</Text>
+          </View>
+          <View style={styles.appNameContainer}>
+            <FontAwesome5 name="leaf" size={20} color="#FFF" />
+            <Text style={styles.appNameHeader}>CarbonTrack</Text>
+          </View>
+          <View style={styles.acoesCabecalho}>
+            <TouchableOpacity onPress={handleLogout} style={styles.botaoLogout}>
+              <Feather name="log-out" size={20} color="#FFF" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={toggleTheme} style={styles.botaoTema}>
+              <Feather name={isDarkMode ? "sun" : "moon"} size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
         </LinearGradient>
 
-        {/* Métricas */}
         <View style={styles.containerMetricas}>
           <TouchableOpacity onPress={handleNavigateToProperties} activeOpacity={0.7} style={styles.botaoMetrica}>
-            <MetricCard icon="droplet" title="CO2 Sequestrado" value={`${stats.totalSequestrado} t`} color="#4CAF50" isDarkMode={isDarkMode} />
+            <MetricCard
+              icon="droplet"
+              title="CO2 Sequestrado"
+              value={`${totalCO2.toFixed(2)} t`}
+              color="#4CAF50"
+              isDarkMode={isDarkMode}
+              loading={carregando}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleNavigateToProperties} activeOpacity={0.7} style={styles.botaoMetrica}>
-            <MetricCard icon="home" title="Propriedades" value={stats.propriedades} color="#2196F3" isDarkMode={isDarkMode} />
+            <MetricCard icon="home" title="Propriedades" value={totalPropriedades} color="#2196F3" isDarkMode={isDarkMode} loading={carregando} />
           </TouchableOpacity>
         </View>
 
-        {/* Atividades Recentes */}
         <View style={styles.containerAtividades}>
           <View style={styles.cabecalhoSecao}>
-            <Text style={[styles.tituloSecao, themeStyles.texto]}>Atividades Recentes</Text>
-            <TouchableOpacity onPress={handleNavigateToProperties}>
-              <Text style={styles.textoVerTodos}>Ver todos</Text>
-            </TouchableOpacity>
+            <Text style={[styles.tituloSecao, themeStyles.texto]}>As 3 últimas atividades</Text>
           </View>
 
-          {recentActivities.map((activity) => (
-            <ActivityItem key={activity.id} activity={activity} isDarkMode={isDarkMode} onPress={() => handleActivityPress(activity)} />
-          ))}
+          {carregando ? (
+            <View style={styles.carregandoAtividades}>
+              <ActivityIndicator size="large" color="#4CAF50" />
+              <Text style={[styles.textoCarregando, themeStyles.subTexto]}>Carregando atividades...</Text>
+            </View>
+          ) : atividadesRecentes.length > 0 ? (
+            atividadesRecentes.map((activity) => (
+              <ActivityItem key={activity.id} activity={activity} isDarkMode={isDarkMode} onPress={() => handleActivityPress(activity)} />
+            ))
+          ) : (
+            <View style={styles.semAtividades}>
+              <Text style={[styles.textoSemAtividades, themeStyles.subTexto]}>Nenhuma propriedade cadastrada ainda</Text>
+              <TouchableOpacity onPress={handleNavigateToNewProperty}>
+                <Text style={styles.textoAdicionarPrimeira}>Adicionar primeira propriedade</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         <View style={styles.containerBotaoAdicionar}>
@@ -198,7 +298,6 @@ export default function TelaHome({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Footer */}
         <Footer isDarkMode={isDarkMode} />
       </ScrollView>
     </SafeAreaView>
@@ -206,15 +305,12 @@ export default function TelaHome({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  // Container
   container: {
     flex: 1,
   },
   conteudoScroll: {
     paddingBottom: 0,
   },
-
-  // Cabeçalho
   cabecalho: {
     paddingHorizontal: 20,
     paddingTop: 30,
@@ -225,7 +321,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignContent: "center",
   },
-
   acoesCabecalho: {
     flexDirection: "row",
     gap: 12,
@@ -272,8 +367,6 @@ const styles = StyleSheet.create({
     color: "#FFF",
     letterSpacing: 1,
   },
-
-  // Métricas
   containerMetricas: {
     paddingHorizontal: 20,
     marginTop: 20,
@@ -314,8 +407,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
-
-  // Atividades
   containerAtividades: {
     paddingHorizontal: 20,
     marginTop: 20,
@@ -329,11 +420,6 @@ const styles = StyleSheet.create({
   tituloSecao: {
     fontSize: 18,
     fontWeight: "bold",
-  },
-  textoVerTodos: {
-    color: "#4CAF50",
-    fontSize: 14,
-    fontWeight: "600",
   },
   itemAtividade: {
     flexDirection: "row",
@@ -360,9 +446,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
-  iconeAtividade: {
-    fontSize: 22,
-  },
   conteudoAtividade: {
     flex: 1,
   },
@@ -376,8 +459,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#4CAF50",
   },
-
-  // Botão Adicionar
   containerBotaoAdicionar: {
     paddingHorizontal: 20,
     marginTop: 20,
@@ -404,8 +485,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-
-  // Rodapé
   rodape: {
     marginTop: 20,
     paddingVertical: 30,
@@ -435,31 +514,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
     marginVertical: 15,
   },
-  estatisticasRodape: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  estatisticaRodape: {
-    alignItems: "center",
-  },
-  valorEstatisticaRodape: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#4CAF50",
-    marginBottom: 4,
-  },
-  rotuloEstatisticaRodape: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.7)",
-  },
-  divisorEstatisticaRodape: {
-    width: 1,
-    height: 30,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    marginHorizontal: 20,
-  },
   versaoRodape: {
     fontSize: 11,
     color: "rgba(255,255,255,0.5)",
@@ -470,8 +524,29 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.4)",
     textAlign: "center",
   },
-
-  // Temas
+  carregandoAtividades: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+  },
+  textoCarregando: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+  semAtividades: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+  },
+  textoSemAtividades: {
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  textoAdicionarPrimeira: {
+    fontSize: 14,
+    color: "#4CAF50",
+    fontWeight: "600",
+  },
   claro: {
     container: { backgroundColor: "#F5F5F5" },
     texto: { color: "#333" },

@@ -1,26 +1,28 @@
-import React, { useContext, useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator, FlatList, SafeAreaView } from "react-native";
-// import { SafeAreaView } from "react-native-safe-area-context";
-import { AppContext } from "../../context/AppProvider";
+import { useAuth } from "../../context/AuthContext.js";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import MapView, { Polygon, Marker } from "react-native-maps";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_BASE_URL } from "../config.js";
 
-// API Nominatim (OpenStreetMap)
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-
 let ultimaRequisicao = 0;
 
 export default function TelaNovaPropriedade({ navigation }) {
-  const { user, isDarkMode, toggleTheme } = useContext(AppContext);
+  const { isDarkMode, toggleTheme } = useAuth();
+
+  const [userNome, setUserNome] = useState("");
+  const [userId, setUserId] = useState(null);
+  const [token, setToken] = useState(null);
+
   const [carregando, setCarregando] = useState(false);
   const [calculando, setCalculando] = useState(false);
   const [buscandoEndereco, setBuscandoEndereco] = useState(false);
   const mapRef = useRef(null);
 
-  // Estados do formulário
   const [nomePropriedade, setNomePropriedade] = useState("");
   const [endereco, setEndereco] = useState("");
   const [enderecoCompleto, setEnderecoCompleto] = useState("");
@@ -29,8 +31,11 @@ export default function TelaNovaPropriedade({ navigation }) {
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
   const [pontos, setPontos] = useState([]);
   const [areaCalculada, setAreaCalculada] = useState(null);
-  const [carbonoSequestrado, setCarbonoSequestrado] = useState(null);
+  const [carbonoEstimado, setCarbonoEstimado] = useState(null);
   const [desenhando, setDesenhando] = useState(true);
+  const [anoAquisicao, setAnoAquisicao] = useState(null);
+  const [mesAquisicao, setMesAquisicao] = useState(null);
+
   const [coordenadaAtual, setCoordenadaAtual] = useState({
     latitude: -23.5505,
     longitude: -46.6333,
@@ -40,7 +45,42 @@ export default function TelaNovaPropriedade({ navigation }) {
 
   const temaEstilos = isDarkMode ? styles.escuro : styles.claro;
 
-  // Buscar endereço usando Nominatim
+  // Carregar dados do usuário do AsyncStorage
+  useEffect(() => {
+    const carregarDadosUsuario = async () => {
+      try {
+        let storedToken = await AsyncStorage.getItem("auth_token");
+        let storedUserId = await AsyncStorage.getItem("usuario_id");
+        let storedNome = await AsyncStorage.getItem("usuario_nome");
+
+        if (!storedToken) {
+          storedToken = await AsyncStorage.getItem("@auth_token");
+          storedUserId = await AsyncStorage.getItem("@usuario_id");
+          storedNome = await AsyncStorage.getItem("@usuario_nome");
+        }
+
+        console.log("📦 Token encontrado:", !!storedToken);
+        console.log("📦 UserId:", storedUserId);
+        console.log("📦 Nome:", storedNome);
+
+        if (storedToken && storedUserId) {
+          setToken(storedToken);
+          setUserId(storedUserId);
+          setUserNome(storedNome || "");
+          console.log("✅ Dados do usuário carregados:", { userId: storedUserId, nome: storedNome });
+        } else {
+          console.log("⚠️ Nenhum token encontrado, redirecionando para login");
+          Alert.alert("Sessão expirada", "Por favor, faça login novamente.");
+          navigation.reset({ index: 0, routes: [{ name: "TelaLogin" }] });
+        }
+      } catch (error) {
+        console.error("Erro ao carregar usuário:", error);
+        navigation.reset({ index: 0, routes: [{ name: "TelaLogin" }] });
+      }
+    };
+    carregarDadosUsuario();
+  }, [navigation]);
+
   const buscarEnderecoNominatim = useCallback(async (texto) => {
     try {
       const agora = Date.now();
@@ -58,9 +98,7 @@ export default function TelaNovaPropriedade({ navigation }) {
           countrycodes: "br",
           "accept-language": "pt-BR",
         },
-        headers: {
-          "User-Agent": "CarbonTrackApp/1.0",
-        },
+        headers: { "User-Agent": "CarbonTrackApp/1.0" },
         timeout: 10000,
       });
 
@@ -74,7 +112,6 @@ export default function TelaNovaPropriedade({ navigation }) {
     }
   }, []);
 
-  // Buscar endereço
   const handleBuscarEndereco = useCallback(async () => {
     if (buscaManual.length < 3) {
       Alert.alert("Aviso", "Digite pelo menos 3 caracteres para buscar");
@@ -86,7 +123,6 @@ export default function TelaNovaPropriedade({ navigation }) {
 
     try {
       const resultados = await buscarEnderecoNominatim(buscaManual);
-
       if (resultados.length === 0) {
         Alert.alert("Aviso", `Nenhum local encontrado para "${buscaManual}"`);
         setMostrarSugestoes(false);
@@ -100,7 +136,6 @@ export default function TelaNovaPropriedade({ navigation }) {
     }
   }, [buscaManual, buscarEnderecoNominatim]);
 
-  // Selecionar endereço
   const selecionarEndereco = useCallback((item) => {
     const latitude = parseFloat(item.lat);
     const longitude = parseFloat(item.lon);
@@ -113,23 +148,11 @@ export default function TelaNovaPropriedade({ navigation }) {
     setSugestoesEndereco([]);
     setMostrarSugestoes(false);
 
-    const novaRegiao = {
-      latitude,
-      longitude,
-      latitudeDelta: 0.02,
-      longitudeDelta: 0.02,
-    };
-
+    const novaRegiao = { latitude, longitude, latitudeDelta: 0.02, longitudeDelta: 0.02 };
     setCoordenadaAtual(novaRegiao);
-
-    if (mapRef.current) {
-      mapRef.current.animateToRegion(novaRegiao, 1000);
-    }
-
-    Alert.alert("Localização Encontrada", `Mapa navegou para: ${nomeLocal}`);
+    mapRef.current?.animateToRegion(novaRegiao, 1000);
   }, []);
 
-  // Adicionar ponto ao polígono
   const handleAdicionarPonto = useCallback(
     (event) => {
       if (!desenhando) return;
@@ -139,37 +162,73 @@ export default function TelaNovaPropriedade({ navigation }) {
     [desenhando]
   );
 
-  // Finalizar desenho do polígono
-  const handleFinalizarDesenho = useCallback(() => {
+  const pontosParaWKT = useCallback(() => {
+    if (pontos.length < 3) return null;
+    const pontosFechados = [...pontos, pontos[0]];
+    const coordenadasStr = pontosFechados.map((p) => `${p.longitude} ${p.latitude}`).join(", ");
+    return `POLYGON((${coordenadasStr}))`;
+  }, [pontos]);
+
+  // ✅ Calcular área aproximada localmente (em hectares)
+  const calcularAreaAproximada = (pontosLista) => {
+    if (pontosLista.length < 3) return 0;
+
+    let area = 0;
+    for (let i = 0; i < pontosLista.length; i++) {
+      const j = (i + 1) % pontosLista.length;
+      area += pontosLista[i].latitude * pontosLista[j].longitude;
+      area -= pontosLista[j].latitude * pontosLista[i].longitude;
+    }
+    area = Math.abs(area) / 2;
+
+    const areaKm2 = area * 111 * 111;
+    const areaHectares = areaKm2 * 100;
+
+    return Math.min(areaHectares, 10000);
+  };
+
+  // APENAS CALCULAR LOCALMENTE (não chama o backend)
+  const handleCalcular = useCallback(() => {
     if (pontos.length < 3) {
       Alert.alert("Erro", "Desenhe pelo menos 3 pontos para formar um polígono");
       return;
     }
 
+    if (!nomePropriedade.trim()) {
+      Alert.alert("Erro", "Informe o nome da propriedade antes de calcular");
+      return;
+    }
+
+    if (!endereco.trim()) {
+      Alert.alert("Erro", "Selecione um endereço antes de calcular");
+      return;
+    }
+
     setCalculando(true);
 
-    const pontosFechados = [...pontos, pontos[0]];
-    let area = 0;
-    for (let i = 0; i < pontosFechados.length - 1; i++) {
-      area += pontosFechados[i].longitude * pontosFechados[i + 1].latitude;
-      area -= pontosFechados[i].latitude * pontosFechados[i + 1].longitude;
+    try {
+      const area = calcularAreaAproximada(pontos);
+      const carbono = area * 50;
+
+      setAreaCalculada(area.toFixed(2));
+      setCarbonoEstimado(carbono.toFixed(2));
+
+      Alert.alert(
+        "✅ Cálculo realizado!",
+        `📐 Área estimada: ${area.toFixed(2)} hectares\n🌿 Carbono estimado: ${carbono.toFixed(
+          2
+        )} tCO₂\n\nClique em "Salvar Propriedade" para concluir o cadastro.`,
+        [{ text: "OK" }]
+      );
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível calcular a área.");
+    } finally {
+      setCalculando(false);
     }
-    area = Math.abs(area) / 2;
-    const areaHectares = area * 10000;
+  }, [pontos, nomePropriedade, endereco]);
 
-    setAreaCalculada(areaHectares.toFixed(2));
-    setCarbonoSequestrado((areaHectares * 0.5).toFixed(2));
-    setDesenhando(false);
-    setCalculando(false);
-
-    Alert.alert("Polígono Finalizado", `Área: ${areaHectares.toFixed(2)} hectares\nCarbono estimado: ${(areaHectares * 0.5).toFixed(2)} tCO₂/ano`, [
-      { text: "OK" },
-    ]);
-  }, [pontos]);
-
-  // Limpar todos os pontos
   const handleLimparPontos = useCallback(() => {
-    Alert.alert("Limpar Polígono", "Tem certeza que deseja limpar todos os pontos?", [
+    Alert.alert("Limpar Polígono", "Deseja limpar todos os pontos?", [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Limpar",
@@ -177,19 +236,17 @@ export default function TelaNovaPropriedade({ navigation }) {
         onPress: () => {
           setPontos([]);
           setAreaCalculada(null);
-          setCarbonoSequestrado(null);
+          setCarbonoEstimado(null);
           setDesenhando(true);
         },
       },
     ]);
   }, []);
 
-  // Desfazer último ponto
   const handleDesfazerPonto = useCallback(() => {
     setPontos((prev) => prev.slice(0, -1));
   }, []);
 
-  // Centralizar Brasil
   const centralizarBrasil = useCallback(() => {
     const novaRegiao = {
       latitude: -15.7801,
@@ -201,46 +258,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     mapRef.current?.animateToRegion(novaRegiao, 1000);
   }, []);
 
-  // Salvar no AsyncStorage
-  const salvarNoStorage = async (propriedade) => {
-    try {
-      const propriedadesExistentesJson = await AsyncStorage.getItem("@CarbonTrack:propriedades");
-      let propriedades = [];
-
-      if (propriedadesExistentesJson) {
-        propriedades = JSON.parse(propriedadesExistentesJson);
-      }
-
-      const novaPropriedade = {
-        id: Date.now(),
-        ...propriedade,
-        dataCriacao: new Date().toISOString(),
-      };
-
-      propriedades.push(novaPropriedade);
-
-      await AsyncStorage.setItem("@CarbonTrack:propriedades", JSON.stringify(propriedades));
-
-      console.log("\n📀 ========== PROPRIEDADE SALVA NO STORAGE ==========");
-      console.log("📌 ID:", novaPropriedade.id);
-      console.log("📌 Nome:", novaPropriedade.nomePropriedade);
-      console.log("📌 Endereço:", novaPropriedade.endereco);
-      console.log("📌 Usuário ID:", novaPropriedade.usuarioId);
-      console.log("📌 Área:", novaPropriedade.areaCalculada, "hectares");
-      console.log("📌 Carbono:", novaPropriedade.carbonoSequestrado, "tCO₂/ano");
-      console.log("📌 Data:", novaPropriedade.dataCriacao);
-      console.log("📌 Geometria:", JSON.stringify(novaPropriedade.geometria, null, 2));
-      console.log("📌 Total de propriedades salvas:", propriedades.length);
-      console.log("==================================================\n");
-
-      return propriedades;
-    } catch (error) {
-      console.error("❌ Erro ao salvar no storage:", error);
-      throw error;
-    }
-  };
-
-  // Salvar propriedade
+  // SALVAR PROPRIEDADE
   const handleSalvarPropriedade = useCallback(async () => {
     if (!nomePropriedade.trim()) {
       Alert.alert("Erro", "Informe o nome da propriedade");
@@ -251,67 +269,87 @@ export default function TelaNovaPropriedade({ navigation }) {
       return;
     }
     if (pontos.length < 3) {
-      Alert.alert("Erro", "Desenhe o polígono da propriedade no mapa");
+      Alert.alert("Erro", "Desenhe o polígono da propriedade");
+      return;
+    }
+    if (!token || !userId) {
+      Alert.alert("Erro de Autenticação", "Faça login novamente.");
       return;
     }
 
     setCarregando(true);
 
-    const pontosFechados = [...pontos, pontos[0]];
-    const coordenadas = pontosFechados.map((ponto) => [ponto.longitude, ponto.latitude]);
+    const geometriaWkt = pontosParaWKT();
+
+    const enderecoParts = (enderecoCompleto || endereco || "").split(",");
+    const cidadeNome = enderecoParts[1]?.trim() || "Região";
+    const estadoSigla = enderecoParts[2]?.trim()?.slice(0, 2).toUpperCase() || "BA";
 
     const payload = {
-      nomePropriedade: nomePropriedade.trim(),
-      endereco: enderecoCompleto || endereco.trim(),
-      usuarioId: user?.id || 1,
-      areaCalculada: areaCalculada,
-      carbonoSequestrado: carbonoSequestrado,
-      geometria: {
-        type: "Polygon",
-        coordinates: [coordenadas],
-      },
+      nome: nomePropriedade.trim(),
+      endereco: (enderecoCompleto || endereco || "").substring(0, 255),
+      cidade: cidadeNome.substring(0, 50),
+      estado: estadoSigla,
+      cep: "00000000",
+      usuarioId: userId,
+      geometriaWkt: geometriaWkt,
     };
 
-    console.log("\n📦 ========== PREPARANDO ENVIO ==========");
-    console.log("📤 Payload sendo enviado:", JSON.stringify(payload, null, 2));
-    console.log("========================================\n");
+    if (anoAquisicao && anoAquisicao > 1900 && anoAquisicao < 2100) {
+      payload.anoAquisicao = anoAquisicao;
+    }
+    if (mesAquisicao && mesAquisicao >= 1 && mesAquisicao <= 12) {
+      payload.mesAquisicao = mesAquisicao;
+    }
+
+    console.log("📤 Salvando propriedade...");
+    console.log("📤 Payload:", JSON.stringify(payload, null, 2));
 
     try {
-      const propriedadesAtualizadas = await salvarNoStorage(payload);
-
-      console.log("\n✅ ========== RESUMO DA OPERAÇÃO ==========");
-      console.log(`✅ Propriedade "${payload.nomePropriedade}" salva com sucesso!`);
-      console.log(`📍 Endereço: ${payload.endereco}`);
-      console.log(`🌳 Área: ${payload.areaCalculada} hectares`);
-      console.log(`🌿 Carbono anual: ${payload.carbonoSequestrado} tCO₂`);
-      console.log(`🔢 Total de propriedades no storage: ${propriedadesAtualizadas.length}`);
-      console.log("==========================================\n");
+      const response = await axios.post(`${API_BASE_URL}/propriedades`, payload, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       Alert.alert(
         "✅ Sucesso!",
-        `Propriedade "${payload.nomePropriedade}" cadastrada com sucesso!\n\n` +
-          `📍 Endereço: ${endereco}\n` +
-          `🌳 Área: ${areaCalculada} hectares\n` +
-          `🌿 Carbono anual: ${carbonoSequestrado} tCO₂\n\n` +
-          `✅ Dados salvos localmente!`,
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              navigation.goBack();
-            },
-          },
-        ]
+        `Propriedade "${payload.nome}" cadastrada com sucesso!\n\n📐 Área: ${(response.data?.areaHectares || areaCalculada || 0).toFixed(
+          2
+        )} hectares\n🌿 Carbono: ${(response.data?.carbonoEstimado || carbonoEstimado || 0).toFixed(2)} tCO₂`,
+        [{ text: "OK", onPress: () => navigation.goBack() }]
       );
     } catch (error) {
-      console.error("❌ Erro ao salvar:", error);
-      Alert.alert("Erro", "Não foi possível cadastrar a propriedade. Tente novamente.");
+      console.error("❌ Erro ao salvar:", error.response?.data);
+
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        Alert.alert("Erro de Autenticação", "Sua sessão expirou. Faça login novamente.");
+        await AsyncStorage.removeItem("@auth_token");
+        navigation.reset({ index: 0, routes: [{ name: "TelaLogin" }] });
+      } else if (error.response?.status === 400) {
+        Alert.alert("Erro", "Dados inválidos. Verifique os campos preenchidos.");
+      } else {
+        Alert.alert("Erro", "Não foi possível cadastrar a propriedade.");
+      }
     } finally {
       setCarregando(false);
     }
-  }, [nomePropriedade, endereco, enderecoCompleto, pontos, user, areaCalculada, carbonoSequestrado, navigation]);
+  }, [
+    nomePropriedade,
+    endereco,
+    enderecoCompleto,
+    pontos,
+    userId,
+    token,
+    anoAquisicao,
+    mesAquisicao,
+    navigation,
+    pontosParaWKT,
+    areaCalculada,
+    carbonoEstimado,
+  ]);
 
-  // Renderizar sugestão
   const renderSugestao = ({ item }) => (
     <TouchableOpacity style={[styles.itemSugestao, isDarkMode && styles.itemSugestaoEscuro]} onPress={() => selecionarEndereco(item)}>
       <Feather name="map-pin" size={16} color="#4CAF50" />
@@ -374,13 +412,39 @@ export default function TelaNovaPropriedade({ navigation }) {
                 {buscandoEndereco ? <ActivityIndicator size="small" color="#FFF" /> : <Feather name="search" size={22} color="#FFF" />}
               </TouchableOpacity>
             </View>
-
             {endereco !== "" && (
               <View style={styles.enderecoSelecionado}>
                 <Feather name="check-circle" size={16} color="#4CAF50" />
                 <Text style={[styles.textoEnderecoSelecionado, temaEstilos.subTexto]}>{enderecoCompleto || endereco}</Text>
               </View>
             )}
+          </View>
+
+          <View style={styles.campo}>
+            <Text style={[styles.rotuloCampo, temaEstilos.texto]}>Ano de Aquisição (opcional)</Text>
+            <TextInput
+              style={[styles.input, isDarkMode && styles.inputEscuro]}
+              placeholder="Ex: 2020"
+              placeholderTextColor="#999"
+              keyboardType="numeric"
+              value={anoAquisicao?.toString() || ""}
+              onChangeText={(text) => setAnoAquisicao(text ? parseInt(text) : null)}
+            />
+          </View>
+
+          <View style={styles.campo}>
+            <Text style={[styles.rotuloCampo, temaEstilos.texto]}>Mês de Aquisição (opcional)</Text>
+            <TextInput
+              style={[styles.input, isDarkMode && styles.inputEscuro]}
+              placeholder="Ex: 5"
+              placeholderTextColor="#999"
+              keyboardType="numeric"
+              value={mesAquisicao?.toString() || ""}
+              onChangeText={(text) => {
+                const val = text ? parseInt(text) : null;
+                setMesAquisicao(val ? Math.min(12, Math.max(1, val)) : null);
+              }}
+            />
           </View>
 
           <View style={styles.botoesNavegacao}>
@@ -392,23 +456,15 @@ export default function TelaNovaPropriedade({ navigation }) {
         </View>
 
         <View style={styles.secaoMapa}>
-          <Text style={[styles.tituloSecao, temaEstilos.texto]}>Desenhe o Polígono da Propriedade</Text>
+          <Text style={[styles.tituloSecao, temaEstilos.texto]}>Desenhe o Polígono</Text>
           <Text style={[styles.subtituloSecao, temaEstilos.subTexto]}>
-            {desenhando && pontos.length === 0 && "📍 Toque no mapa para adicionar os vértices"}
+            {desenhando && pontos.length === 0 && "📍 Toque no mapa para adicionar vértices"}
             {desenhando && pontos.length > 0 && `✏️ ${pontos.length} ponto(s) adicionados`}
             {!desenhando && "✅ Polígono finalizado!"}
           </Text>
 
           <View style={styles.containerMapa}>
-            <MapView
-              ref={mapRef}
-              style={styles.mapa}
-              region={coordenadaAtual}
-              onPress={handleAdicionarPonto}
-              zoomControlEnabled={true}
-              zoomEnabled={true}
-              scrollEnabled={true}
-            >
+            <MapView ref={mapRef} style={styles.mapa} region={coordenadaAtual} onPress={handleAdicionarPonto} zoomControlEnabled={true}>
               {pontos.map((ponto, index) => (
                 <Marker key={index} coordinate={ponto} title={`Ponto ${index + 1}`} pinColor="#4CAF50" />
               ))}
@@ -424,13 +480,13 @@ export default function TelaNovaPropriedade({ navigation }) {
               </TouchableOpacity>
             )}
             {desenhando && pontos.length >= 3 && (
-              <TouchableOpacity style={[styles.botaoControle, styles.botaoFinalizar]} onPress={handleFinalizarDesenho}>
+              <TouchableOpacity style={[styles.botaoControle, styles.botaoCalcular]} onPress={handleCalcular}>
                 {calculando ? (
                   <ActivityIndicator size="small" color="#FFF" />
                 ) : (
                   <>
-                    <Feather name="check" size={18} color="#FFF" />
-                    <Text style={styles.textoBotaoControle}>Finalizar</Text>
+                    <Feather name="activity" size={18} color="#FFF" />
+                    <Text style={styles.textoBotaoControle}>Calcular</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -448,20 +504,20 @@ export default function TelaNovaPropriedade({ navigation }) {
           </View>
         </View>
 
-        {(areaCalculada || carbonoSequestrado) && (
+        {(areaCalculada || carbonoEstimado) && (
           <View style={styles.secaoInfo}>
-            <Text style={[styles.tituloSecao, temaEstilos.texto]}>🌱 Informações Ambientais</Text>
+            <Text style={[styles.tituloSecao, temaEstilos.texto]}>🌱 Informações Calculadas</Text>
             <View style={styles.cardInfo}>
               <View style={styles.itemInfo}>
                 <MaterialCommunityIcons name="map-marker-radius" size={24} color="#4CAF50" />
                 <Text style={[styles.valorInfo, temaEstilos.texto]}>{areaCalculada} ha</Text>
-                <Text style={styles.rotuloInfo}>Área Total</Text>
+                <Text style={styles.rotuloInfo}>Área Estimada</Text>
               </View>
               <View style={styles.divisorInfo} />
               <View style={styles.itemInfo}>
                 <MaterialCommunityIcons name="leaf" size={24} color="#4CAF50" />
-                <Text style={[styles.valorInfo, temaEstilos.texto]}>{carbonoSequestrado} tCO₂</Text>
-                <Text style={styles.rotuloInfo}>Sequestro anual</Text>
+                <Text style={[styles.valorInfo, temaEstilos.texto]}>{carbonoEstimado} tCO₂</Text>
+                <Text style={styles.rotuloInfo}>Carbono Estimado</Text>
               </View>
             </View>
           </View>
@@ -474,14 +530,9 @@ export default function TelaNovaPropriedade({ navigation }) {
           <TouchableOpacity
             style={styles.botaoSalvar}
             onPress={handleSalvarPropriedade}
-            disabled={carregando || pontos.length < 3 || !nomePropriedade || !endereco}
+            disabled={carregando || pontos.length < 3 || !nomePropriedade || !endereco || !token || !userId}
           >
-            <LinearGradient
-              colors={carregando ? ["#999", "#666"] : ["#4CAF50", "#2D5A27"]}
-              style={styles.gradienteSalvar}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
+            <LinearGradient colors={carregando ? ["#999", "#666"] : ["#4CAF50", "#2D5A27"]} style={styles.gradienteSalvar}>
               {carregando ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
@@ -499,17 +550,12 @@ export default function TelaNovaPropriedade({ navigation }) {
         <View style={styles.sugestoesOverlay}>
           <View style={styles.sugestoesContainer}>
             <View style={styles.sugestoesHeader}>
-              <Text style={[styles.sugestoesTitulo, temaEstilos.texto]}>📍 Locais encontrados ({sugestoesEndereco.length})</Text>
+              <Text style={[styles.sugestoesTitulo, temaEstilos.texto]}>📍 Locais ({sugestoesEndereco.length})</Text>
               <TouchableOpacity onPress={() => setMostrarSugestoes(false)}>
                 <Feather name="x" size={20} color="#999" />
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={sugestoesEndereco}
-              keyExtractor={(item, index) => `${item.lat}-${item.lon}-${index}`}
-              renderItem={renderSugestao}
-              showsVerticalScrollIndicator={true}
-            />
+            <FlatList data={sugestoesEndereco} keyExtractor={(item, index) => `${item.lat}-${item.lon}-${index}`} renderItem={renderSugestao} />
           </View>
         </View>
       )}
@@ -525,14 +571,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
-
   topoCabecalho: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
   },
-
   botaoVoltar: {
     width: 40,
     height: 40,
@@ -541,7 +585,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  tituloCabecalho: { fontSize: 20, fontWeight: "bold", color: "#FFF" },
+  tituloCabecalho: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#FFF",
+  },
   botaoTema: {
     width: 40,
     height: 40,
@@ -550,10 +598,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  conteudo: { flex: 1 },
-  formulario: { padding: 20 },
-  campo: { marginBottom: 20 },
-  rotuloCampo: { fontSize: 14, fontWeight: "600", marginBottom: 8 },
+  conteudo: {
+    flex: 1,
+  },
+  formulario: {
+    padding: 20,
+  },
+  campo: {
+    marginBottom: 20,
+  },
+  rotuloCampo: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
   input: {
     backgroundColor: "#FFF",
     borderRadius: 12,
@@ -562,8 +620,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
-  inputEscuro: { backgroundColor: "#1E1E1E", color: "#FFF", borderColor: "#333" },
-  containerBusca: { flexDirection: "row", gap: 10 },
+  inputEscuro: {
+    backgroundColor: "#1E1E1E",
+    color: "#FFF",
+    borderColor: "#333",
+  },
+  containerBusca: {
+    flexDirection: "row",
+    gap: 10,
+  },
   inputBusca: {
     flex: 1,
     backgroundColor: "#FFF",
@@ -590,8 +655,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#E8F5E9",
     borderRadius: 8,
   },
-  textoEnderecoSelecionado: { flex: 1, fontSize: 12 },
-  botoesNavegacao: { flexDirection: "row", gap: 10, marginTop: 5 },
+  textoEnderecoSelecionado: {
+    flex: 1,
+    fontSize: 12,
+  },
+  botoesNavegacao: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 5,
+  },
   botaoNavegacao: {
     flexDirection: "row",
     alignItems: "center",
@@ -601,10 +673,24 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 5,
   },
-  textoBotaoNavegacao: { fontSize: 12, color: "#4CAF50", fontWeight: "500" },
-  secaoMapa: { paddingHorizontal: 20, marginBottom: 20 },
-  tituloSecao: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
-  subtituloSecao: { fontSize: 12, marginBottom: 15 },
+  textoBotaoNavegacao: {
+    fontSize: 12,
+    color: "#4CAF50",
+    fontWeight: "500",
+  },
+  secaoMapa: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  tituloSecao: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  subtituloSecao: {
+    fontSize: 12,
+    marginBottom: 15,
+  },
   containerMapa: {
     height: 400,
     borderRadius: 15,
@@ -613,8 +699,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
-  mapa: { flex: 1 },
-  controlesMapa: { flexDirection: "row", gap: 10, justifyContent: "center", flexWrap: "wrap" },
+  mapa: {
+    flex: 1,
+  },
+  controlesMapa: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "center",
+    flexWrap: "wrap",
+  },
   botaoControle: {
     flexDirection: "row",
     alignItems: "center",
@@ -624,11 +717,24 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     gap: 8,
   },
-  botaoFinalizar: { backgroundColor: "#2196F3" },
-  botaoRedesenhar: { backgroundColor: "#FF9800" },
-  botaoLimpar: { backgroundColor: "#FF5252" },
-  textoBotaoControle: { color: "#FFF", fontSize: 14, fontWeight: "600" },
-  secaoInfo: { paddingHorizontal: 20, marginBottom: 20 },
+  botaoCalcular: {
+    backgroundColor: "#2196F3",
+  },
+  botaoRedesenhar: {
+    backgroundColor: "#FF9800",
+  },
+  botaoLimpar: {
+    backgroundColor: "#FF5252",
+  },
+  textoBotaoControle: {
+    color: "#FFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  secaoInfo: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
   cardInfo: {
     flexDirection: "row",
     backgroundColor: "#FFF",
@@ -636,16 +742,29 @@ const styles = StyleSheet.create({
     padding: 20,
     elevation: 3,
   },
-  itemInfo: { flex: 1, alignItems: "center", gap: 8 },
-  valorInfo: { fontSize: 20, fontWeight: "bold" },
-  rotuloInfo: { fontSize: 12, color: "#666", textAlign: "center" },
-  divisorInfo: { width: 1, backgroundColor: "#E0E0E0" },
+  itemInfo: {
+    flex: 1,
+    alignItems: "center",
+    gap: 8,
+  },
+  valorInfo: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  rotuloInfo: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+  },
+  divisorInfo: {
+    width: 1,
+    backgroundColor: "#E0E0E0",
+  },
   botoesAcao: {
     flexDirection: "row",
     paddingHorizontal: 20,
     paddingBottom: 30,
     gap: 12,
-    marginBottom: 20,
   },
   botaoCancelar: {
     flex: 1,
@@ -654,8 +773,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#E0E0E0",
     alignItems: "center",
   },
-  textoBotaoCancelar: { fontSize: 16, fontWeight: "600", color: "#666" },
-  botaoSalvar: { flex: 2, borderRadius: 12, overflow: "hidden" },
+  textoBotaoCancelar: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#666",
+  },
+  botaoSalvar: {
+    flex: 2,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
   gradienteSalvar: {
     flexDirection: "row",
     alignItems: "center",
@@ -663,8 +790,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 8,
   },
-  textoBotaoSalvar: { color: "#FFF", fontSize: 16, fontWeight: "600" },
-
+  textoBotaoSalvar: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   sugestoesOverlay: {
     position: "absolute",
     top: 0,
@@ -690,7 +820,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
   },
-  sugestoesTitulo: { fontSize: 18, fontWeight: "bold" },
+  sugestoesTitulo: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
   itemSugestao: {
     flexDirection: "row",
     alignItems: "center",
@@ -699,11 +832,29 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F0F0F0",
     gap: 12,
   },
-  itemSugestaoEscuro: { borderBottomColor: "#333", backgroundColor: "#1E1E1E" },
-  textoSugestaoContainer: { flex: 1 },
-  tituloSugestao: { fontSize: 16, fontWeight: "500" },
-  subtituloSugestao: { fontSize: 12, marginTop: 2 },
-
-  claro: { container: { backgroundColor: "#F5F5F5" }, texto: { color: "#333" }, subTexto: { color: "#666" } },
-  escuro: { container: { backgroundColor: "#121212" }, texto: { color: "#FFF" }, subTexto: { color: "#CCC" } },
+  itemSugestaoEscuro: {
+    borderBottomColor: "#333",
+    backgroundColor: "#1E1E1E",
+  },
+  textoSugestaoContainer: {
+    flex: 1,
+  },
+  tituloSugestao: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  subtituloSugestao: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  claro: {
+    container: { backgroundColor: "#F5F5F5" },
+    texto: { color: "#333" },
+    subTexto: { color: "#666" },
+  },
+  escuro: {
+    container: { backgroundColor: "#121212" },
+    texto: { color: "#FFF" },
+    subTexto: { color: "#CCC" },
+  },
 });

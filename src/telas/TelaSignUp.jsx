@@ -1,78 +1,150 @@
-// src/telas/Signup.js
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
-import { useAuth } from "../../context/AuthContext.js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { API_BASE_URL } from '../config';
 
 export default function Signup({ navigation }) {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
-  const { login } = useAuth();
+  const [loading, setLoading] = useState(false);
 
-  const isButtonDisabled = nome.trim() === "" || email.trim() === "" || senha.trim() === "";
+  const isValidEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const isButtonDisabled = () => {
+    if (nome.trim() === "") return true;
+    if (!isValidEmail(email)) return true;
+    if (senha.trim() === "") return true;
+    if (senha !== confirmarSenha) return true;
+    if (senha.length < 6) return true;
+    return loading;
+  };
 
   const handleSignup = async () => {
+    if (senha !== confirmarSenha) {
+      Alert.alert("Erro", "As senhas não coincidem");
+      return;
+    }
+
+    if (senha.length < 6) {
+      Alert.alert("Erro", "A senha deve ter pelo menos 6 caracteres");
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      Alert.alert("Erro", "Digite um email válido");
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      // Salvar usuário via AuthContext
-      const success = await login(nome.trim());
+      console.log("📤 Cadastrando no backend:", { nome, email, senha });
+      
+      const response = await axios.post(`${API_BASE_URL}/usuarios`, {
+        nome: nome.trim(),
+        email: email.trim().toLowerCase(),
+        senha: senha.trim()
+      });
 
-      if (success) {
-        // Aqui você pode também salvar o email em outro lugar se necessário
-        await AsyncStorage.setItem("@usuario_email", email.trim());
+      console.log("✅ Usuário criado:", response.data);
 
-        Alert.alert("Sucesso!", "Conta criada com sucesso!", [
-          {
-            text: "OK",
-            onPress: () => {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "TelaHome" }],
-              });
+      if (response.data) {
+        const loginResponse = await axios.post(`${API_BASE_URL}/auth/login`, {
+          email: email.trim().toLowerCase(),
+          senha: senha.trim()
+        });
+
+        console.log("✅ Login automático realizado");
+
+        if (loginResponse.data.token) {
+          // SALVAR APENAS COM CHAVES 
+          await AsyncStorage.setItem("usuario_nome", nome.trim());
+          await AsyncStorage.setItem("usuario_senha", senha.trim());
+          await AsyncStorage.setItem("usuario_id", response.data.id || loginResponse.data.id);
+          await AsyncStorage.setItem("usuario_email", email.trim().toLowerCase());
+          await AsyncStorage.setItem("auth_token", loginResponse.data.token);
+          
+          // VERIFICAR SE SALVOU
+          const testNome = await AsyncStorage.getItem("usuario_nome");
+          const testSenha = await AsyncStorage.getItem("usuario_senha");
+          const testToken = await AsyncStorage.getItem("auth_token");
+          
+          console.log("🔍 VERIFICAÇÃO PÓS-SALVAMENTO:");
+          console.log("  - Nome salvo:", testNome);
+          console.log("  - Senha salva:", testSenha ? "existe" : "não existe");
+          console.log("  - Token salvo:", testToken ? "existe" : "não existe");
+          
+          Alert.alert("Sucesso!", "Conta criada com sucesso!", [
+            {
+              text: "OK",
+              onPress: () => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: "TelaHome" }],
+                });
+              },
             },
-          },
-        ]);
-      } else {
-        Alert.alert("Erro", "Não foi possível criar a conta.");
+          ]);
+        } else {
+          throw new Error("Falha no login automático");
+        }
       }
     } catch (error) {
-      console.error(error);
-      Alert.alert("Erro", "Não foi possível salvar os dados de usuário.");
+      console.error("❌ Erro no cadastro:", error.response?.data || error.message);
+      Alert.alert("Erro", "Não foi possível criar a conta. Tente novamente.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <LinearGradient colors={["#1a472a", "#2D5A27", "#4CAF50"]} style={styles.container} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <View style={styles.card}>
-        {/* Logo CarbonTrack */}
         <View style={styles.logoContainer}>
           <Text style={styles.appName}>CarbonTrack</Text>
-          <Text style={styles.appSubtitle}>Crie sua conta</Text>
+          <Text style={styles.appSubtitle}>Crie sua cuenta</Text>
         </View>
 
         <Text style={styles.title}>Cadastro</Text>
         <Text style={styles.subtitle}>Preencha os dados abaixo</Text>
 
-        {/* Campo Nome */}
         <View style={styles.inputContainer}>
           <Feather name="user" size={20} color="#4CAF50" />
-          <TextInput placeholder="Nome completo" style={styles.input} value={nome} onChangeText={setNome} placeholderTextColor="#999" />
+          <TextInput 
+            placeholder="Nome completo" 
+            style={styles.input} 
+            value={nome} 
+            onChangeText={setNome} 
+            placeholderTextColor="#999" 
+          />
         </View>
 
-        {/* Campo Email */}
         <View style={styles.inputContainer}>
           <Feather name="mail" size={20} color="#4CAF50" />
-          <TextInput placeholder="E-mail" style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" placeholderTextColor="#999" />
+          <TextInput 
+            placeholder="E-mail" 
+            style={styles.input} 
+            value={email} 
+            onChangeText={setEmail} 
+            keyboardType="email-address" 
+            autoCapitalize="none"
+            placeholderTextColor="#999" 
+          />
         </View>
 
-        {/* Campo Senha */}
         <View style={styles.inputContainer}>
           <Feather name="lock" size={20} color="#4CAF50" />
           <TextInput
-            placeholder="Senha"
+            placeholder="Senha (mínimo 6 caracteres)"
             style={styles.input}
             value={senha}
             onChangeText={setSenha}
@@ -84,20 +156,40 @@ export default function Signup({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Botão Cadastrar */}
-        <TouchableOpacity style={[styles.button, isButtonDisabled && styles.buttonDisabled]} onPress={handleSignup} disabled={isButtonDisabled}>
+        <View style={styles.inputContainer}>
+          <Feather name="lock" size={20} color="#4CAF50" />
+          <TextInput
+            placeholder="Confirmar senha"
+            style={styles.input}
+            value={confirmarSenha}
+            onChangeText={setConfirmarSenha}
+            secureTextEntry={!mostrarSenha}
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        <TouchableOpacity 
+          style={[styles.button, isButtonDisabled() && styles.buttonDisabled]} 
+          onPress={handleSignup} 
+          disabled={isButtonDisabled()}
+        >
           <LinearGradient
-            colors={isButtonDisabled ? ["#ccc", "#aaa"] : ["#4CAF50", "#2D5A27"]}
+            colors={isButtonDisabled() ? ["#ccc", "#aaa"] : ["#4CAF50", "#2D5A27"]}
             style={styles.buttonGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
-            <Feather name="user-plus" size={20} color="#FFF" />
-            <Text style={styles.buttonText}>CRIAR CONTA</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <>
+                <Feather name="user-plus" size={20} color="#FFF" />
+                <Text style={styles.buttonText}>CRIAR CONTA</Text>
+              </>
+            )}
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Link para Login */}
         <View style={styles.loginContainer}>
           <Text style={styles.loginText}>Já tem uma conta? </Text>
           <TouchableOpacity onPress={() => navigation.navigate("TelaLogin")}>

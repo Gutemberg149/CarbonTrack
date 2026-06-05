@@ -1,26 +1,77 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext.js";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function Login({ navigation }) {
   const [nome, setNome] = useState("");
   const [senha, setSenha] = useState("");
-  const { login } = useAuth(); // Use o contexto
+  const [loading, setLoading] = useState(false);
+  const { setUser } = useAuth();
 
-  const isButtonDisabled = nome.trim() === "" || senha.trim() === "";
+  const isButtonDisabled = () => {
+    return nome.trim() === "" || senha.trim() === "" || loading;
+  };
 
   const handleLogin = async () => {
-    const success = await login(nome.trim()); // Salva via contexto
+    setLoading(true);
 
-    if (success) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "TelaHome" }],
+    try {
+      // Buscar dados salvos no AsyncStorage
+      const storedNome = await AsyncStorage.getItem("usuario_nome");
+      const storedSenha = await AsyncStorage.getItem("usuario_senha");
+      const storedToken = await AsyncStorage.getItem("auth_token");
+      const storedUserId = await AsyncStorage.getItem("usuario_id");
+      const storedEmail = await AsyncStorage.getItem("usuario_email");
+
+      console.log("📝 Dados digitados:", { nome: nome.trim(), senha: senha.trim() });
+      console.log("📦 Dados no storage:", { 
+        storedNome, 
+        storedSenha: storedSenha ? "existe" : "não existe",
+        hasToken: !!storedToken,
       });
-    } else {
-      Alert.alert("Erro", "Não foi possível realizar o acesso");
+
+      if (storedNome && storedSenha) {
+        if (storedNome === nome.trim() && storedSenha === senha.trim()) {
+          console.log("✅ Login bem-sucedido para:", storedNome);
+
+          const userData = {
+            id: storedUserId,
+            nome: storedNome,
+            email: storedEmail,
+          };
+
+          if (setUser) {
+            setUser(userData);
+          }
+
+          Alert.alert("Sucesso", `Bem-vindo, ${storedNome}!`);
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "TelaHome" }],
+          });
+          return;
+        } else {
+          Alert.alert("Erro", "Nome ou senha incorretos. Tente novamente.");
+          return;
+        }
+      }
+
+      Alert.alert(
+        "Usuário não encontrado",
+        "Não encontramos uma conta com esses dados. Por favor, cadastre-se primeiro.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Cadastrar", onPress: () => navigation.navigate("TelaSignup") },
+        ]
+      );
+    } catch (error) {
+      console.error("Erro no login:", error);
+      Alert.alert("Erro", "Ocorreu um erro. Tente novamente.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -35,25 +86,52 @@ export default function Login({ navigation }) {
         <Text style={styles.title}>Bem-vindo!</Text>
         <Text style={styles.subtitle}>Faça login para continuar</Text>
 
-        <TextInput placeholder="Seu nome" style={styles.input} value={nome} onChangeText={setNome} placeholderTextColor="#999" />
+        <TextInput 
+          placeholder="Seu nome" 
+          style={styles.input} 
+          value={nome} 
+          onChangeText={setNome} 
+          placeholderTextColor="#999"
+        />
 
-        <TextInput placeholder="Sua senha" style={styles.input} value={senha} onChangeText={setSenha} secureTextEntry placeholderTextColor="#999" />
+        <TextInput 
+          placeholder="Sua senha" 
+          style={styles.input} 
+          value={senha} 
+          onChangeText={setSenha} 
+          secureTextEntry 
+          placeholderTextColor="#999"
+        />
 
-        <TouchableOpacity style={[styles.button, isButtonDisabled && styles.buttonDisabled]} onPress={handleLogin} disabled={isButtonDisabled}>
+        <TouchableOpacity 
+          style={[styles.button, isButtonDisabled() && styles.buttonDisabled]} 
+          onPress={handleLogin} 
+          disabled={isButtonDisabled()}
+        >
           <LinearGradient
-            colors={isButtonDisabled ? ["#ccc", "#aaa"] : ["#4CAF50", "#2D5A27"]}
+            colors={isButtonDisabled() ? ["#ccc", "#aaa"] : ["#4CAF50", "#2D5A27"]}
             style={styles.buttonGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
-            <Feather name="log-in" size={20} color="#FFF" />
-            <Text style={styles.buttonText}>ENTRAR</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <>
+                <Feather name="log-in" size={20} color="#FFF" />
+                <Text style={styles.buttonText}>ENTRAR</Text>
+              </>
+            )}
           </LinearGradient>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate("TelaSignup")} style={styles.link}>
+        <TouchableOpacity 
+          onPress={() => navigation.navigate("TelaSignup")} 
+          style={styles.link}
+        >
           <Text style={styles.linkText}>Não tem conta? Cadastre-se</Text>
         </TouchableOpacity>
+
         <Text style={styles.version}>Versão 1.0.0</Text>
       </View>
     </LinearGradient>
@@ -121,7 +199,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     marginTop: 10,
-    flexDirection: "row",
   },
   buttonDisabled: {
     opacity: 0.6,

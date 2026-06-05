@@ -5,13 +5,11 @@ import { NavigationContainer } from "@react-navigation/native";
 import Routes from "./src/routes/stack_route";
 
 import { AppProvider } from "./context/AppProvider";
-import { AuthProvider } from "./context/AuthContext.js"; // Adicione esta linha
+import { AuthProvider } from "./context/AuthContext.js"; 
 
 export default function App() {
   return (
     <AuthProvider>
-      {" "}
-      {/* Envolva com AuthProvider */}
       <AppProvider>
         <SafeAreaProvider style={styles.appGlobal}>
           <StatusBar style="auto" />
