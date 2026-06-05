@@ -33,6 +33,8 @@ export default function TelaNovaPropriedade({ navigation }) {
   const [areaCalculada, setAreaCalculada] = useState(null);
   const [carbonoEstimado, setCarbonoEstimado] = useState(null);
   const [desenhando, setDesenhando] = useState(true);
+
+  // ✅ Alterado: ano e mês agora são obrigatórios (sem valor padrão)
   const [anoAquisicao, setAnoAquisicao] = useState(null);
   const [mesAquisicao, setMesAquisicao] = useState(null);
 
@@ -169,7 +171,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     return `POLYGON((${coordenadasStr}))`;
   }, [pontos]);
 
-  // ✅ Calcular área aproximada localmente (em hectares)
+  // Calcular área aproximada localmente (em hectares)
   const calcularAreaAproximada = (pontosLista) => {
     if (pontosLista.length < 3) return 0;
 
@@ -186,6 +188,33 @@ export default function TelaNovaPropriedade({ navigation }) {
 
     return Math.min(areaHectares, 10000);
   };
+
+  // ✅ Validação de ano e mês
+  const validarAnoMes = useCallback(() => {
+    const anoAtual = new Date().getFullYear();
+
+    if (!anoAquisicao) {
+      Alert.alert("Erro", "Informe o ano de aquisição da propriedade");
+      return false;
+    }
+
+    if (!mesAquisicao) {
+      Alert.alert("Erro", "Informe o mês de aquisição da propriedade");
+      return false;
+    }
+
+    if (anoAquisicao < 1900 || anoAquisicao > anoAtual) {
+      Alert.alert("Erro", `Ano inválido. Use um valor entre 1900 e ${anoAtual}`);
+      return false;
+    }
+
+    if (mesAquisicao < 1 || mesAquisicao > 12) {
+      Alert.alert("Erro", "Mês inválido. Use um valor entre 1 e 12");
+      return false;
+    }
+
+    return true;
+  }, [anoAquisicao, mesAquisicao]);
 
   // APENAS CALCULAR LOCALMENTE (não chama o backend)
   const handleCalcular = useCallback(() => {
@@ -204,20 +233,40 @@ export default function TelaNovaPropriedade({ navigation }) {
       return;
     }
 
+    // ✅ Nova validação: ano e mês obrigatórios
+    if (!validarAnoMes()) {
+      return;
+    }
+
     setCalculando(true);
 
     try {
       const area = calcularAreaAproximada(pontos);
-      const carbono = area * 50;
+      // ✅ Fórmula mais precisa considerando tempo de posse
+      const anoAtual = new Date().getFullYear();
+      const mesAtual = new Date().getMonth() + 1;
+
+      let anosPosse = anoAtual - anoAquisicao;
+      let mesesPosse = mesAtual - mesAquisicao;
+
+      if (mesesPosse < 0) {
+        anosPosse--;
+        mesesPosse += 12;
+      }
+
+      const totalMeses = anosPosse * 12 + mesesPosse;
+      const sequestroMensal = 0.5; // tCO₂ por hectare por mês
+      const carbono = area * sequestroMensal * Math.max(totalMeses, 1);
 
       setAreaCalculada(area.toFixed(2));
       setCarbonoEstimado(carbono.toFixed(2));
 
       Alert.alert(
         "✅ Cálculo realizado!",
-        `📐 Área estimada: ${area.toFixed(2)} hectares\n🌿 Carbono estimado: ${carbono.toFixed(
-          2
-        )} tCO₂\n\nClique em "Salvar Propriedade" para concluir o cadastro.`,
+        `📐 Área estimada: ${area.toFixed(2)} hectares\n` +
+          `📅 Tempo de posse: ${totalMeses} meses (${anosPosse} anos)\n` +
+          `🌿 Carbono estimado: ${carbono.toFixed(2)} tCO₂\n\n` +
+          `Clique em "Salvar Propriedade" para concluir o cadastro.`,
         [{ text: "OK" }]
       );
     } catch (error) {
@@ -225,7 +274,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     } finally {
       setCalculando(false);
     }
-  }, [pontos, nomePropriedade, endereco]);
+  }, [pontos, nomePropriedade, endereco, anoAquisicao, mesAquisicao, validarAnoMes]);
 
   const handleLimparPontos = useCallback(() => {
     Alert.alert("Limpar Polígono", "Deseja limpar todos os pontos?", [
@@ -272,6 +321,10 @@ export default function TelaNovaPropriedade({ navigation }) {
       Alert.alert("Erro", "Desenhe o polígono da propriedade");
       return;
     }
+    // ✅ Validação obrigatória de ano e mês
+    if (!validarAnoMes()) {
+      return;
+    }
     if (!token || !userId) {
       Alert.alert("Erro de Autenticação", "Faça login novamente.");
       return;
@@ -293,14 +346,9 @@ export default function TelaNovaPropriedade({ navigation }) {
       cep: "00000000",
       usuarioId: userId,
       geometriaWkt: geometriaWkt,
+      anoAquisicao: anoAquisicao, // ✅ Agora é obrigatório
+      mesAquisicao: mesAquisicao, // ✅ Agora é obrigatório
     };
-
-    if (anoAquisicao && anoAquisicao > 1900 && anoAquisicao < 2100) {
-      payload.anoAquisicao = anoAquisicao;
-    }
-    if (mesAquisicao && mesAquisicao >= 1 && mesAquisicao <= 12) {
-      payload.mesAquisicao = mesAquisicao;
-    }
 
     console.log("📤 Salvando propriedade...");
     console.log("📤 Payload:", JSON.stringify(payload, null, 2));
@@ -315,9 +363,9 @@ export default function TelaNovaPropriedade({ navigation }) {
 
       Alert.alert(
         "✅ Sucesso!",
-        `Propriedade "${payload.nome}" cadastrada com sucesso!\n\n📐 Área: ${(response.data?.areaHectares || areaCalculada || 0).toFixed(
-          2
-        )} hectares\n🌿 Carbono: ${(response.data?.carbonoEstimado || carbonoEstimado || 0).toFixed(2)} tCO₂`,
+        `Propriedade "${payload.nome}" cadastrada com sucesso!\n\n` +
+          `📐 Área: ${(response.data?.areaHectares || areaCalculada || 0).toFixed(2)} hectares\n` +
+          `🌿 Carbono: ${(response.data?.carbonoEstimado || carbonoEstimado || 0).toFixed(2)} tCO₂`,
         [{ text: "OK", onPress: () => navigation.goBack() }]
       );
     } catch (error) {
@@ -348,6 +396,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     pontosParaWKT,
     areaCalculada,
     carbonoEstimado,
+    validarAnoMes,
   ]);
 
   const renderSugestao = ({ item }) => (
@@ -420,8 +469,11 @@ export default function TelaNovaPropriedade({ navigation }) {
             )}
           </View>
 
+          {/* ✅ Campos de ano e mês agora são obrigatórios - com destaque visual */}
           <View style={styles.campo}>
-            <Text style={[styles.rotuloCampo, temaEstilos.texto]}>Ano de Aquisição (opcional)</Text>
+            <Text style={[styles.rotuloCampo, temaEstilos.texto]}>
+              Ano de Aquisição <Text>*</Text>
+            </Text>
             <TextInput
               style={[styles.input, isDarkMode && styles.inputEscuro]}
               placeholder="Ex: 2020"
@@ -430,10 +482,13 @@ export default function TelaNovaPropriedade({ navigation }) {
               value={anoAquisicao?.toString() || ""}
               onChangeText={(text) => setAnoAquisicao(text ? parseInt(text) : null)}
             />
+            <Text style={[styles.textoAjuda, temaEstilos.subTexto]}>Ano em que a propriedade foi adquirida (ex: 2020)</Text>
           </View>
 
           <View style={styles.campo}>
-            <Text style={[styles.rotuloCampo, temaEstilos.texto]}>Mês de Aquisição (opcional)</Text>
+            <Text style={[styles.rotuloCampo, temaEstilos.texto]}>
+              Mês de Aquisição <Text>*</Text>
+            </Text>
             <TextInput
               style={[styles.input, isDarkMode && styles.inputEscuro]}
               placeholder="Ex: 5"
@@ -445,6 +500,7 @@ export default function TelaNovaPropriedade({ navigation }) {
                 setMesAquisicao(val ? Math.min(12, Math.max(1, val)) : null);
               }}
             />
+            <Text style={[styles.textoAjuda, temaEstilos.subTexto]}>Mês em que a propriedade foi adquirida (1 a 12)</Text>
           </View>
 
           <View style={styles.botoesNavegacao}>
@@ -480,7 +536,7 @@ export default function TelaNovaPropriedade({ navigation }) {
               </TouchableOpacity>
             )}
             {desenhando && pontos.length >= 3 && (
-              <TouchableOpacity style={[styles.botaoControle, styles.botaoCalcular]} onPress={handleCalcular}>
+              <TouchableOpacity style={[styles.botaoControle, styles.botaoCalcular]} onPress={handleCalcular} disabled={!anoAquisicao || !mesAquisicao}>
                 {calculando ? (
                   <ActivityIndicator size="small" color="#FFF" />
                 ) : (
@@ -530,9 +586,9 @@ export default function TelaNovaPropriedade({ navigation }) {
           <TouchableOpacity
             style={styles.botaoSalvar}
             onPress={handleSalvarPropriedade}
-            disabled={carregando || pontos.length < 3 || !nomePropriedade || !endereco || !token || !userId}
+            disabled={carregando || pontos.length < 3 || !nomePropriedade || !endereco || !token || !userId || !anoAquisicao || !mesAquisicao}
           >
-            <LinearGradient colors={carregando ? ["#999", "#666"] : ["#4CAF50", "#2D5A27"]} style={styles.gradienteSalvar}>
+            <LinearGradient colors={carregando || !anoAquisicao || !mesAquisicao ? ["#999", "#666"] : ["#4CAF50", "#2D5A27"]} style={styles.gradienteSalvar}>
               {carregando ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
@@ -624,6 +680,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#1E1E1E",
     color: "#FFF",
     borderColor: "#333",
+  },
+  textoAjuda: {
+    fontSize: 11,
+    marginTop: 4,
+    marginLeft: 4,
   },
   containerBusca: {
     flexDirection: "row",
