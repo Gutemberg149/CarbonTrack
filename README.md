@@ -41,7 +41,7 @@ O CarbonTrack foi desenvolvido como parte da Global Solution, com o objetivo de 
 
 
 ## 🎥 Vídeo da Solução
-[Link do vídeo no YouTube](https://youtu.be/SEU_LINK_AQUI)
+[Link do vídeo no YouTube](https://vimeo.com/1199209112?share=copy&fl=sv&fe=ci)
 
 
 ## 👥 Integrantes do Grupo
