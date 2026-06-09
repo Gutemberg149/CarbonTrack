@@ -8,6 +8,7 @@ import { useAuth } from "../../context/AuthContext.js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { API_BASE_URL } from "../config.js";
+import Footer from "../componentes/rodape.jsx";
 
 const MetricCard = ({ icon, title, value, color, isDarkMode, loading }) => (
   <LinearGradient colors={isDarkMode ? ["#1E1E1E", "#2A2A2A"] : ["#FFFFFF", "#F8F9FA"]} style={styles.cardMetrica} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
@@ -33,20 +34,7 @@ const ActivityItem = ({ activity, isDarkMode, onPress }) => (
   </TouchableOpacity>
 );
 
-const Footer = ({ isDarkMode }) => (
-  <LinearGradient colors={isDarkMode ? ["#1E272E", "#0D1117"] : ["#2D5A27", "#1B3A1A"]} style={styles.rodape} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-    <View style={styles.conteudoRodape}>
-      <FontAwesome5 name="leaf" size={28} color="#4CAF50" />
-      <Text style={styles.tituloRodape}>CarbonTrack</Text>
-      <Text style={styles.subtituloRodape}>Monitoramento Inteligente de Carbono</Text>
 
-      <View style={styles.divisorRodape} />
-
-      <Text style={styles.versaoRodape}>Versão 1.0.0</Text>
-      <Text style={styles.copyrightRodape}>© 2024 CarbonTrack. Todos os direitos reservados.</Text>
-    </View>
-  </LinearGradient>
-);
 
 export default function TelaHome({ navigation }) {
   const { logout } = useAuth();

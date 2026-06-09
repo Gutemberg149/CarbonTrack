@@ -603,6 +603,7 @@ export default function TelaNovaPropriedade({ navigation }) {
           </View>
         </View>
       )}
+      
     </SafeAreaView>
   );
 }
