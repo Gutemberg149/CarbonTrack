@@ -127,7 +127,7 @@ export default function TelaHome({ navigation }) {
       setTotalCO2(somaCO2);
       console.log("📊 Total CO2:", somaCO2.toFixed(2), "t");
 
-      // Gerar atividades recentes (últimas 3 propriedades) - ALTERADO PARA 3
+      // Gerar atividades recentes 
       const ultimasPropriedades = [...propriedadesDoUsuario]
         .sort((a, b) => {
           return (b.anoAquisicao || 0) - (a.anoAquisicao || 0);
@@ -156,7 +156,7 @@ export default function TelaHome({ navigation }) {
     }
   }, [token, userId, navigation]);
 
-  // Recarregar dados quando a tela receber foco
+  // Recarregar dados quando voltar a tela
   useFocusEffect(
     useCallback(() => {
       console.log("🔄 TelaHome recebeu foco - recarregando dados...");

@@ -40,8 +40,9 @@ O CarbonTrack foi desenvolvido como parte da Global Solution, com o objetivo de 
 > `https://carbontrackjava.onrender.com`
 
 
-## 🎥 Vídeo da Solução
-[Link do vídeo no YouTube](https://vimeo.com/1199209112?share=copy&fl=sv&fe=ci)
+## 🎥 Vídeos da Solução
+[Link video demonstração do App](https://vimeo.com/1199209112?share=copy&fl=sv&fe=ci)
+[Link do vídeo pitch](https://www.youtube.com/watch?si=9VAQnp6Qb1YGpaHM&v=qoZpOKsNDUI&feature=youtu.be)
 
 
 ## 👥 Integrantes do Grupo
