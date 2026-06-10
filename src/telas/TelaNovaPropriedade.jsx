@@ -908,7 +908,6 @@
 //     subTexto: { color: "#CCC" },
 //   },
 // });
-
 import React, { useState, useCallback, useRef, useEffect, useContext } from "react";
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
@@ -924,8 +923,9 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "../config.js";
 
-const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+// URLs das APIs de geocodificação
 const PHOTON_URL = "https://photon.komoot.io/api/";
+const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 let ultimaRequisicao = 0;
 
 export default function TelaNovaPropriedade({ navigation }) {
@@ -964,7 +964,7 @@ export default function TelaNovaPropriedade({ navigation }) {
 
   const temaEstilos = isDarkMode ? styles.escuro : styles.claro;
 
-  // Carregar dados do usuário do AsyncStorage
+  // ==================== CARREGAR DADOS DO USUÁRIO ====================
   useEffect(() => {
     const carregarDadosUsuario = async () => {
       try {
@@ -1000,21 +1000,72 @@ export default function TelaNovaPropriedade({ navigation }) {
     carregarDadosUsuario();
   }, [navigation]);
 
-  // Buscar endereço usando Nominatim (compatível com Windows)
-  const buscarEnderecoNominatim = useCallback(async (texto) => {
+  // ==================== BUSCA NO PHOTON (PRINCIPAL - FUNCIONA NO WINDOWS) ====================
+  const buscarNoPhoton = useCallback(async (texto) => {
     try {
+      console.log("📡 Buscando no Photon:", texto);
+      
+      const response = await axios.get(PHOTON_URL, {
+        params: {
+          q: texto,
+          limit: 10,
+          lang: "pt",
+          country: "BR"
+        },
+        timeout: 10000,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'CarbonTrackApp/1.0'
+        }
+      });
+
+      if (response.data && response.data.features && response.data.features.length > 0) {
+        console.log("✅ Photon encontrou:", response.data.features.length, "resultados");
+        
+        return response.data.features.map(feature => {
+          const props = feature.properties;
+          const coords = feature.geometry.coordinates;
+          
+          let nome = props.name || '';
+          let cidade = props.city || props.town || props.village || '';
+          let estado = props.state || '';
+          let pais = props.country || 'Brasil';
+          
+          let displayName = nome;
+          if (cidade) displayName += `, ${cidade}`;
+          if (estado) displayName += `, ${estado}`;
+          if (pais) displayName += `, ${pais}`;
+          
+          return {
+            lat: coords[1],
+            lon: coords[0],
+            display_name: displayName,
+            name: nome,
+            city: cidade,
+            state: estado
+          };
+        });
+      }
+      return [];
+      
+    } catch (error) {
+      console.error("❌ Erro no Photon:", error.message);
+      return [];
+    }
+  }, []);
+
+  // ==================== BUSCA NO NOMINATIM (FALLBACK) ====================
+  const buscarNoNominatim = useCallback(async (texto) => {
+    try {
+      console.log("📡 Buscando no Nominatim:", texto);
+      
       const agora = Date.now();
       const tempoDecorrido = agora - ultimaRequisicao;
       
-      // Delay maior para Windows (mais restritivo)
-      const delay = Platform.OS === 'windows' || Platform.OS === 'web' ? 2000 : 1000;
-      if (tempoDecorrido < delay) {
-        await new Promise((resolve) => setTimeout(resolve, delay - tempoDecorrido));
+      if (tempoDecorrido < 1500) {
+        await new Promise(resolve => setTimeout(resolve, 1500 - tempoDecorrido));
       }
-
-      // User-Agent mais completo para evitar bloqueio
-      const userAgent = `CarbonTrackApp/1.0 (React Native; ${Platform.OS === 'web' ? 'Web' : 'Mobile'}) contato@carbontrack.com`;
-
+      
       const response = await axios.get(NOMINATIM_URL, {
         params: {
           q: texto,
@@ -1025,72 +1076,41 @@ export default function TelaNovaPropriedade({ navigation }) {
           "accept-language": "pt-BR",
         },
         headers: { 
-          "User-Agent": userAgent,
-          "Accept": "application/json",
-          "Accept-Language": "pt-BR,pt;q=0.9"
+          "User-Agent": "CarbonTrackApp/1.0 (contato@carbontrack.com)",
+          "Accept": "application/json"
         },
         timeout: 15000,
       });
-
+      
       ultimaRequisicao = Date.now();
       
       if (response.data && response.data.length > 0) {
+        console.log("✅ Nominatim encontrou:", response.data.length, "resultados");
         return response.data;
       }
       return [];
       
     } catch (error) {
-      console.error("Erro Nominatim:", error.message);
-      return null; // Retorna null para tentar fallback
-    }
-  }, []);
-
-  // Buscar endereço usando Photon (fallback para Windows)
-  const buscarEnderecoPhoton = useCallback(async (texto) => {
-    try {
-      const response = await axios.get(PHOTON_URL, {
-        params: {
-          q: texto,
-          limit: 10,
-          lang: "pt",
-          country: "BR"
-        },
-        timeout: 10000,
-      });
-
-      if (response.data && response.data.features && response.data.features.length > 0) {
-        // Converter formato Photon para formato Nominatim
-        return response.data.features.map(feature => ({
-          lat: feature.geometry.coordinates[1],
-          lon: feature.geometry.coordinates[0],
-          display_name: feature.properties.name || feature.properties.street || texto,
-          name: feature.properties.name,
-          city: feature.properties.city || feature.properties.state,
-          state: feature.properties.state
-        }));
-      }
-      return [];
-      
-    } catch (error) {
-      console.error("Erro Photon:", error.message);
+      console.error("❌ Erro no Nominatim:", error.message);
       return [];
     }
   }, []);
 
-  // Buscar endereço principal (tenta Nominatim, depois fallback)
+  // ==================== BUSCA PRINCIPAL (TENTA PHOTON PRIMEIRO) ====================
   const buscarEndereco = useCallback(async (texto) => {
-    // Primeira tentativa: Nominatim
-    let resultados = await buscarEnderecoNominatim(texto);
+    // Primeira tentativa: Photon (melhor para Windows)
+    let resultados = await buscarNoPhoton(texto);
     
-    // Se falhar ou não tiver resultados, tenta Photon (fallback)
-    if (!resultados || resultados.length === 0) {
-      console.log("Nominatim falhou, tentando Photon como fallback...");
-      resultados = await buscarEnderecoPhoton(texto);
+    // Se não encontrou, tenta Nominatim
+    if (resultados.length === 0) {
+      console.log("🔄 Photon sem resultados, tentando Nominatim...");
+      resultados = await buscarNoNominatim(texto);
     }
     
     return resultados;
-  }, [buscarEnderecoNominatim, buscarEnderecoPhoton]);
+  }, [buscarNoPhoton, buscarNoNominatim]);
 
+  // ==================== HANDLER DA BUSCA DE ENDEREÇO ====================
   const handleBuscarEndereco = useCallback(async () => {
     if (buscaManual.length < 3) {
       Alert.alert("Aviso", "Digite pelo menos 3 caracteres para buscar");
@@ -1102,8 +1122,12 @@ export default function TelaNovaPropriedade({ navigation }) {
 
     try {
       const resultados = await buscarEndereco(buscaManual);
+      
       if (resultados.length === 0) {
-        Alert.alert("Aviso", `Nenhum local encontrado para "${buscaManual}". Tente um termo mais específico.`);
+        Alert.alert(
+          "Nenhum local encontrado", 
+          `Não foi possível encontrar "${buscaManual}".\n\nTente:\n• Digitar a cidade completa\n• Colocar cidade e estado (ex: "São Paulo SP")\n• Usar um termo mais específico`
+        );
         setMostrarSugestoes(false);
       } else {
         setSugestoesEndereco(resultados);
@@ -1117,11 +1141,17 @@ export default function TelaNovaPropriedade({ navigation }) {
     }
   }, [buscaManual, buscarEndereco]);
 
+  // ==================== SELECIONAR ENDEREÇO ====================
   const selecionarEndereco = useCallback((item) => {
     const latitude = parseFloat(item.lat);
     const longitude = parseFloat(item.lon);
-    const nomeLocal = item.display_name?.split(",")[0] || item.name || buscaManual;
-    const enderecoFormatado = item.display_name || `${item.city || ''}, ${item.state || ''}`;
+    
+    let nomeLocal = item.display_name?.split(",")[0] || item.name || buscaManual;
+    let enderecoFormatado = item.display_name || `${item.city || ''} ${item.state || ''}`;
+    
+    if (nomeLocal.length > 50) {
+      nomeLocal = item.city || item.state || "Local selecionado";
+    }
 
     setEndereco(nomeLocal);
     setEnderecoCompleto(enderecoFormatado);
@@ -1129,19 +1159,22 @@ export default function TelaNovaPropriedade({ navigation }) {
     setSugestoesEndereco([]);
     setMostrarSugestoes(false);
 
-    const novaRegiao = { latitude, longitude, latitudeDelta: 0.02, longitudeDelta: 0.02 };
+    const novaRegiao = { 
+      latitude, 
+      longitude, 
+      latitudeDelta: 0.02, 
+      longitudeDelta: 0.02 
+    };
     setCoordenadaAtual(novaRegiao);
     mapRef.current?.animateToRegion(novaRegiao, 1000);
   }, [buscaManual]);
 
-  const handleAdicionarPonto = useCallback(
-    (event) => {
-      if (!desenhando) return;
-      const { coordinate } = event.nativeEvent;
-      setPontos((prev) => [...prev, coordinate]);
-    },
-    [desenhando]
-  );
+  // ==================== FUNÇÕES DO MAPA ====================
+  const handleAdicionarPonto = useCallback((event) => {
+    if (!desenhando) return;
+    const { coordinate } = event.nativeEvent;
+    setPontos((prev) => [...prev, coordinate]);
+  }, [desenhando]);
 
   const pontosParaWKT = useCallback(() => {
     if (pontos.length < 3) return null;
@@ -1160,13 +1193,12 @@ export default function TelaNovaPropriedade({ navigation }) {
       area -= pontosLista[j].latitude * pontosLista[i].longitude;
     }
     area = Math.abs(area) / 2;
-
     const areaKm2 = area * 111 * 111;
     const areaHectares = areaKm2 * 100;
-
     return Math.min(areaHectares, 10000);
   };
 
+  // ==================== VALIDAÇÕES ====================
   const validarAnoMes = useCallback(() => {
     const anoAtual = new Date().getFullYear();
 
@@ -1193,6 +1225,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     return true;
   }, [anoAquisicao, mesAquisicao]);
 
+  // ==================== CALCULAR CARBONO ====================
   const handleCalcular = useCallback(() => {
     if (pontos.length < 3) {
       Alert.alert("Erro", "Desenhe pelo menos 3 pontos para formar um polígono");
@@ -1238,9 +1271,9 @@ export default function TelaNovaPropriedade({ navigation }) {
       Alert.alert(
         "✅ Cálculo realizado!",
         `📐 Área estimada: ${area.toFixed(2)} hectares\n` +
-          `📅 Tempo de posse: ${totalMeses} meses (${anosPosse} anos)\n` +
-          `🌿 Carbono estimado: ${carbono.toFixed(2)} tCO₂\n\n` +
-          `Clique em "Salvar Propriedade" para concluir o cadastro.`,
+        `📅 Tempo de posse: ${totalMeses} meses (${anosPosse} anos)\n` +
+        `🌿 Carbono estimado: ${carbono.toFixed(2)} tCO₂\n\n` +
+        `Clique em "Salvar Propriedade" para concluir o cadastro.`,
         [{ text: "OK" }]
       );
     } catch (error) {
@@ -1251,6 +1284,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     }
   }, [pontos, nomePropriedade, endereco, anoAquisicao, mesAquisicao, validarAnoMes]);
 
+  // ==================== CONTROLES DO MAPA ====================
   const handleLimparPontos = useCallback(() => {
     Alert.alert("Limpar Polígono", "Deseja limpar todos os pontos?", [
       { text: "Cancelar", style: "cancel" },
@@ -1282,6 +1316,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     mapRef.current?.animateToRegion(novaRegiao, 1000);
   }, []);
 
+  // ==================== SALVAR PROPRIEDADE ====================
   const handleSalvarPropriedade = useCallback(async () => {
     if (!nomePropriedade.trim()) {
       Alert.alert("Erro", "Informe o nome da propriedade");
@@ -1338,8 +1373,8 @@ export default function TelaNovaPropriedade({ navigation }) {
       Alert.alert(
         "✅ Sucesso!",
         `Propriedade "${payload.nome}" cadastrada com sucesso!\n\n` +
-          `📐 Área: ${(response.data?.areaHectares || areaCalculada || 0).toFixed(2)} hectares\n` +
-          `🌿 Carbono: ${(response.data?.carbonoEstimado || carbonoEstimado || 0).toFixed(2)} tCO₂`,
+        `📐 Área: ${(response.data?.areaHectares || areaCalculada || 0).toFixed(2)} hectares\n` +
+        `🌿 Carbono: ${(response.data?.carbonoEstimado || carbonoEstimado || 0).toFixed(2)} tCO₂`,
         [{ text: "OK", onPress: () => navigation.goBack() }]
       );
     } catch (error) {
@@ -1352,7 +1387,7 @@ export default function TelaNovaPropriedade({ navigation }) {
       } else if (error.response?.status === 400) {
         Alert.alert("Erro", "Dados inválidos. Verifique os campos preenchidos.");
       } else if (error.code === 'ECONNABORTED') {
-        Alert.alert("Erro", "Tempo limite excedido. Verifique sua conexão com a internet.");
+        Alert.alert("Erro", "Tempo limite excedido. Verifique sua conexão.");
       } else {
         Alert.alert("Erro", "Não foi possível cadastrar a propriedade. Tente novamente.");
       }
@@ -1375,6 +1410,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     validarAnoMes,
   ]);
 
+  // ==================== RENDERIZA SUGESTÃO ====================
   const renderSugestao = ({ item }) => (
     <TouchableOpacity 
       style={[styles.itemSugestao, isDarkMode && styles.itemSugestaoEscuro]} 
@@ -1394,6 +1430,7 @@ export default function TelaNovaPropriedade({ navigation }) {
     </TouchableOpacity>
   );
 
+  // ==================== RENDER PRINCIPAL ====================
   return (
     <SafeAreaView style={[styles.container, temaEstilos.container]}>
       <LinearGradient
@@ -1635,6 +1672,7 @@ export default function TelaNovaPropriedade({ navigation }) {
   );
 }
 
+// ==================== ESTILOS ====================
 const styles = StyleSheet.create({
   container: { flex: 1 },
   cabecalho: {
